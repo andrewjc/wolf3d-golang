@@ -43,7 +43,7 @@ func (m *Map) GenerateMap() {
 
 	m.GenerateRooms(5)
 
-	m.GeneratePaths()
+	//m.GeneratePaths()
 
 	// Replace all the -1 with 0
 	for i := 0; i < m.rows; i++ {

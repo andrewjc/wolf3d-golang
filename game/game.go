@@ -77,7 +77,8 @@ func (g *GameInstance) gameInit() {
 	cfg := pixelgl.WindowConfig{
 		Bounds:      pixel.R(0, 0, float64(g.RenderWidth)*g.RenderScale, float64(g.RenderHeight)*g.RenderScale),
 		VSync:       true,
-		Undecorated: true,
+		Undecorated: false,
+		Resizable:   true,
 	}
 
 	if g.RenderFullscreen {
