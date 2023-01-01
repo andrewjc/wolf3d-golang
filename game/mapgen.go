@@ -63,7 +63,7 @@ func (m *Map) GenerateMap() {
 		}
 	}
 
-	m.PrintMap()
+	//m.PrintMap()
 
 }
 

@@ -13,7 +13,7 @@ var (
 	fullscreen = false
 	width      = 640
 	height     = 480
-	scale      = 3.0
+	scale      = 1.0
 )
 
 func main() {

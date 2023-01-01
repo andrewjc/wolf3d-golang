@@ -1,7 +1,6 @@
 package game
 
 import (
-	"fmt"
 	"github.com/faiface/pixel"
 	"github.com/faiface/pixel/pixelgl"
 	"image"
@@ -68,14 +67,6 @@ func (g *GameInstance) gameInit() {
 	mapGen := Map{rows: 48, cols: 48}
 	mapGen.GenerateMap()
 	g.mapData = mapGen.mapData
-
-	// Print out the mapData to the console
-	for _, row := range g.mapData {
-		for _, col := range row {
-			fmt.Printf("%d", col)
-		}
-		fmt.Println()
-	}
 
 	g.textureMap = LoadTextures()
 
