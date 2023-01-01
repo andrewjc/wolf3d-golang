@@ -16,7 +16,7 @@ type IpcServer struct {
 	Config *ServerConfig
 }
 
-func (i *IpcServer) Start() (interface{}, error) {
+func (i *IpcServer) Start() (*Server, error) {
 	err := checkIpcName(i.Config.IpcName)
 	if err != nil {
 		return nil, err
