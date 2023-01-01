@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-type Server struct {
+type IpcConnection struct {
 	name        string
 	listen      net.Listener
 	conn        net.Conn

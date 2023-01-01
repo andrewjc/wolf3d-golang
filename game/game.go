@@ -6,6 +6,7 @@ import (
 	"github.com/faiface/pixel/pixelgl"
 	"image"
 	"image/color"
+	"log"
 	"time"
 )
 
@@ -21,6 +22,10 @@ type GameInstance struct {
 	gameObjects     []GameObject
 	renderListener  *RenderListener
 	renderListener2 *RenderListener
+
+	// Player ipc controllers
+	player1Controller *PlayerController //runner
+	player2Controller *PlayerController //chaser
 
 	// Params
 	RenderWidth      int
@@ -121,12 +126,17 @@ func (g *GameInstance) addGameObjects() {
 		plane:          pixel.V(0.0, 0.66),
 		renderListener: g.renderListener}
 
+	g.player1Controller = &PlayerController{}
+	g.player2Controller = &PlayerController{}
+
 	player1 := Player{
 		game:       g,
 		view:       &player1Camera,
-		controller: &PlayerController{},
+		controller: g.player1Controller,
 	}
 
+	g.player1Controller.player = &player1
+	g.player2Controller.player = &player1
 	player1Camera.parent = &player1
 
 	g.gameObjects = append(g.gameObjects,
@@ -144,7 +154,7 @@ func (g *GameInstance) addGameObjects() {
 	player2 := Player{
 		game:       g,
 		view:       &player2Camera,
-		controller: &PlayerController{},
+		controller: g.player2Controller,
 	}
 
 	player2Camera.parent = &player2
@@ -152,4 +162,53 @@ func (g *GameInstance) addGameObjects() {
 	g.gameObjects = append(g.gameObjects,
 		&player2,
 	)
+}
+
+// Structs for reinforcement learning
+// enum
+type RLAction uint8
+
+const (
+	RLActionNone RLAction = iota
+	RLActionMoveForward
+	RLActionMoveBackward
+	RLActionStrafeLeft
+	RLActionStrafeRight
+	RLActionTurnLeft
+	RLActionTurnRight
+)
+
+type RLActionResult struct {
+	Reward      float64
+	Observation []float64
+	Done        bool
+	Info        string
+}
+
+func (g *GameInstance) TakePlayer1Action(action_id RLAction) RLActionResult {
+
+	if action_id == RLActionNone {
+		return RLActionResult{Reward: 0.0, Observation: nil, Done: false, Info: ""}
+	} else if action_id == RLActionMoveForward {
+		g.player1Controller.player.moveForward(0.1)
+		return RLActionResult{Reward: 0.0, Observation: nil, Done: false, Info: ""}
+	} else if action_id == RLActionMoveBackward {
+		g.player1Controller.player.moveBackwards(0.1)
+		return RLActionResult{Reward: 0.0, Observation: nil, Done: false, Info: ""}
+	} else if action_id == RLActionStrafeLeft {
+		g.player1Controller.player.moveLeft(0.1)
+		return RLActionResult{Reward: 0.0, Observation: nil, Done: false, Info: ""}
+	} else if action_id == RLActionStrafeRight {
+		g.player1Controller.player.moveRight(0.1)
+		return RLActionResult{Reward: 0.0, Observation: nil, Done: false, Info: ""}
+	} else if action_id == RLActionTurnLeft {
+		g.player1Controller.player.turnLeft(0.1)
+		return RLActionResult{Reward: 0.0, Observation: nil, Done: false, Info: ""}
+	} else if action_id == RLActionTurnRight {
+		g.player1Controller.player.turnRight(0.1)
+		return RLActionResult{Reward: 0.0, Observation: nil, Done: false, Info: ""}
+	}
+
+	log.Fatal("Unknown action type ", action_id)
+	return RLActionResult{Reward: 0.0, Observation: nil, Done: false, Info: ""}
 }

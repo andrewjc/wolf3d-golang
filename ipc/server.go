@@ -5,330 +5,330 @@ package ipc
 */
 
 import (
-	"bufio"
-	"errors"
-	"gameenv_ai/game"
-	"time"
+    "bufio"
+    "errors"
+    "gameenv_ai/game"
+    "time"
 )
 
 type IpcServer struct {
-	Game   *game.GameInstance
-	Config *ServerConfig
+    Game       *game.GameInstance
+    Connection *IpcConnection
+    Config     *ServerConfig
 }
 
-func (i *IpcServer) Start() (*Server, error) {
-	err := checkIpcName(i.Config.IpcName)
-	if err != nil {
-		return nil, err
-	}
+func (i *IpcServer) Start() (*IpcServer, error) {
+    err := checkIpcName(i.Config.IpcName)
+    if err != nil {
+        return nil, err
+    }
 
-	sc := &Server{
-		name:     i.Config.IpcName,
-		status:   NotConnected,
-		recieved: make(chan *Message),
-		toWrite:  make(chan *Message),
-	}
+    sc := &IpcConnection{
+        name:     i.Config.IpcName,
+        status:   NotConnected,
+        recieved: make(chan *Message),
+        toWrite:  make(chan *Message),
+    }
 
-	if i.Config == nil {
-		sc.timeout = 0
-		sc.maxMsgSize = maxMsgSize
-		sc.encryption = true
-		sc.unMask = false
+    if i.Config == nil {
+        sc.timeout = 0
+        sc.maxMsgSize = maxMsgSize
+        sc.encryption = true
+        sc.unMask = false
 
-	} else {
+    } else {
 
-		if i.Config.Timeout < 0 {
-			sc.timeout = 0
-		} else {
-			sc.timeout = i.Config.Timeout
-		}
+        if i.Config.Timeout < 0 {
+            sc.timeout = 0
+        } else {
+            sc.timeout = i.Config.Timeout
+        }
 
-		if i.Config.MaxMsgSize < 1024 {
-			sc.maxMsgSize = maxMsgSize
-		} else {
-			sc.maxMsgSize = i.Config.MaxMsgSize
-		}
+        if i.Config.MaxMsgSize < 1024 {
+            sc.maxMsgSize = maxMsgSize
+        } else {
+            sc.maxMsgSize = i.Config.MaxMsgSize
+        }
 
-		if i.Config.Encryption == false {
-			sc.encryption = false
-		} else {
-			sc.encryption = true
-		}
+        if i.Config.Encryption == false {
+            sc.encryption = false
+        } else {
+            sc.encryption = true
+        }
 
-		if i.Config.UnmaskPermissions == true {
-			sc.unMask = true
-		} else {
-			sc.unMask = false
-		}
-	}
+        if i.Config.UnmaskPermissions == true {
+            sc.unMask = true
+        } else {
+            sc.unMask = false
+        }
+    }
 
-	go startServer(sc)
+    go func() {
+        err := sc.beginListening()
+        if err != nil {
+            sc.recieved <- &Message{err: err, MsgType: -2}
+        }
+    }()
 
-	return sc, err
+    i.Connection = sc
+
+    return i, err
 }
 
-func startServer(sc *Server) {
+func (sc *IpcConnection) acceptLoop() {
+    for {
+        conn, err := sc.listen.Accept()
+        if err != nil {
+            break
+        }
 
-	err := sc.run()
-	if err != nil {
-		sc.recieved <- &Message{err: err, MsgType: -2}
-	}
-}
+        if sc.status == Listening || sc.status == ReConnecting {
 
-func (sc *Server) acceptLoop() {
-	for {
-		conn, err := sc.listen.Accept()
-		if err != nil {
-			break
-		}
+            sc.conn = conn
 
-		if sc.status == Listening || sc.status == ReConnecting {
+            err2 := sc.handshake()
+            if err2 != nil {
+                sc.recieved <- &Message{err: err2, MsgType: -2}
+                sc.status = Error
+                sc.listen.Close()
+                sc.conn.Close()
 
-			sc.conn = conn
+            } else {
+                go sc.read()
+                go sc.write()
 
-			err2 := sc.handshake()
-			if err2 != nil {
-				sc.recieved <- &Message{err: err2, MsgType: -2}
-				sc.status = Error
-				sc.listen.Close()
-				sc.conn.Close()
+                sc.status = Connected
+                sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
+                sc.connChannel <- true
+            }
 
-			} else {
-				go sc.read()
-				go sc.write()
+        }
 
-				sc.status = Connected
-				sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
-				sc.connChannel <- true
-			}
-
-		}
-
-	}
-
-}
-
-func (sc *Server) connectionTimer() error {
-
-	if sc.timeout != 0 {
-
-		timeout := make(chan bool)
-
-		go func() {
-			time.Sleep(sc.timeout * time.Second)
-			timeout <- true
-		}()
-
-		select {
-
-		case <-sc.connChannel:
-			return nil
-		case <-timeout:
-			sc.listen.Close()
-			return errors.New("Timed out waiting for client to connect")
-		}
-	}
-
-	select {
-
-	case <-sc.connChannel:
-		return nil
-	}
+    }
 
 }
 
-func (sc *Server) read() {
+func (sc *IpcConnection) connectionTimer() error {
 
-	bLen := make([]byte, 4)
+    if sc.timeout != 0 {
 
-	for {
+        timeout := make(chan bool)
 
-		res := sc.readData(bLen)
-		if res == false {
-			break
-		}
+        go func() {
+            time.Sleep(sc.timeout * time.Second)
+            timeout <- true
+        }()
 
-		mLen := bytesToInt(bLen)
+        select {
 
-		msgRecvd := make([]byte, mLen)
+        case <-sc.connChannel:
+            return nil
+        case <-timeout:
+            sc.listen.Close()
+            return errors.New("Timed out waiting for client to connect")
+        }
+    }
 
-		res = sc.readData(msgRecvd)
-		if res == false {
-			break
-		}
+    select {
 
-		if sc.encryption == true {
-			msgFinal, err := decrypt(*sc.enc.cipher, msgRecvd)
-			if err != nil {
-				sc.recieved <- &Message{err: err, MsgType: -2}
-				continue
-			}
-
-			if bytesToInt(msgFinal[:4]) == 0 {
-				//  type 0 = control message
-			} else {
-				sc.recieved <- &Message{Data: msgFinal[4:], MsgType: bytesToInt(msgFinal[:4])}
-			}
-
-		} else {
-			if bytesToInt(msgRecvd[:4]) == 0 {
-				//  type 0 = control message
-			} else {
-				sc.recieved <- &Message{Data: msgRecvd[4:], MsgType: bytesToInt(msgRecvd[:4])}
-			}
-		}
-
-	}
-}
-
-func (sc *Server) readData(buff []byte) bool {
-
-	_, err := sc.conn.Read(buff)
-	if err != nil {
-
-		if sc.status == Closing {
-
-			sc.status = Closed
-			sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
-			sc.recieved <- &Message{err: errors.New("Server has closed the connection"), MsgType: -2}
-			return false
-		}
-
-		go sc.reConnect()
-		return false
-
-	}
-
-	return true
+    case <-sc.connChannel:
+        return nil
+    }
 
 }
 
-func (sc *Server) reConnect() {
+func (sc *IpcConnection) read() {
 
-	sc.status = ReConnecting
-	sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
+    bLen := make([]byte, 4)
 
-	err := sc.connectionTimer()
-	if err != nil {
-		sc.status = Timeout
-		sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
+    for {
 
-		sc.recieved <- &Message{err: err, MsgType: -2}
+        res := sc.readData(bLen)
+        if res == false {
+            break
+        }
 
-	}
+        mLen := bytesToInt(bLen)
+
+        msgRecvd := make([]byte, mLen)
+
+        res = sc.readData(msgRecvd)
+        if res == false {
+            break
+        }
+
+        if sc.encryption == true {
+            msgFinal, err := decrypt(*sc.enc.cipher, msgRecvd)
+            if err != nil {
+                sc.recieved <- &Message{err: err, MsgType: -2}
+                continue
+            }
+
+            if bytesToInt(msgFinal[:4]) == 0 {
+                //  type 0 = control message
+            } else {
+                sc.recieved <- &Message{Data: msgFinal[4:], MsgType: bytesToInt(msgFinal[:4])}
+            }
+
+        } else {
+            if bytesToInt(msgRecvd[:4]) == 0 {
+                //  type 0 = control message
+            } else {
+                sc.recieved <- &Message{Data: msgRecvd[4:], MsgType: bytesToInt(msgRecvd[:4])}
+            }
+        }
+
+    }
+}
+
+func (sc *IpcConnection) readData(buff []byte) bool {
+
+    _, err := sc.conn.Read(buff)
+    if err != nil {
+
+        if sc.status == Closing {
+
+            sc.status = Closed
+            sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
+            sc.recieved <- &Message{err: errors.New("IpcConnection has closed the connection"), MsgType: -2}
+            return false
+        }
+
+        go sc.reConnect()
+        return false
+
+    }
+
+    return true
+
+}
+
+func (sc *IpcConnection) reConnect() {
+
+    sc.status = ReConnecting
+    sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
+
+    err := sc.connectionTimer()
+    if err != nil {
+        sc.status = Timeout
+        sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
+
+        sc.recieved <- &Message{err: err, MsgType: -2}
+
+    }
 
 }
 
 // Read - blocking function that waits until an non multipart message is recieved
 
-func (sc *Server) Read() (*Message, error) {
+func (sc *IpcConnection) Read() (*Message, error) {
 
-	m, ok := (<-sc.recieved)
-	if ok == false {
-		return nil, errors.New("the recieve channel has been closed")
-	}
+    m, ok := (<-sc.recieved)
+    if ok == false {
+        return nil, errors.New("the recieve channel has been closed")
+    }
 
-	if m.err != nil {
-		close(sc.recieved)
-		close(sc.toWrite)
-		return nil, m.err
-	}
+    if m.err != nil {
+        close(sc.recieved)
+        close(sc.toWrite)
+        return nil, m.err
+    }
 
-	return m, nil
+    return m, nil
 
 }
 
 // Write - writes a non multipart message to the ipc connection.
 // msgType - denotes the type of data being sent. 0 is a reserved type for internal messages and errors.
-func (sc *Server) Write(msgType int, message []byte) error {
+func (sc *IpcConnection) Write(msgType int, message []byte) error {
 
-	if msgType == 0 {
-		return errors.New("Message type 0 is reserved")
-	}
+    if msgType == 0 {
+        return errors.New("Message type 0 is reserved")
+    }
 
-	mlen := len(message)
+    mlen := len(message)
 
-	if mlen > sc.maxMsgSize {
-		return errors.New("Message exceeds maximum message length")
-	}
+    if mlen > sc.maxMsgSize {
+        return errors.New("Message exceeds maximum message length")
+    }
 
-	if sc.status == Connected {
+    if sc.status == Connected {
 
-		sc.toWrite <- &Message{MsgType: msgType, Data: message}
+        sc.toWrite <- &Message{MsgType: msgType, Data: message}
 
-	} else {
-		return errors.New(sc.status.String())
-	}
+    } else {
+        return errors.New(sc.status.String())
+    }
 
-	return nil
+    return nil
 
 }
 
-func (sc *Server) write() {
+func (sc *IpcConnection) write() {
 
-	for {
+    for {
 
-		m, ok := <-sc.toWrite
+        m, ok := <-sc.toWrite
 
-		if ok == false {
-			break
-		}
+        if ok == false {
+            break
+        }
 
-		toSend := intToBytes(m.MsgType)
+        toSend := intToBytes(m.MsgType)
 
-		writer := bufio.NewWriter(sc.conn)
+        writer := bufio.NewWriter(sc.conn)
 
-		if sc.encryption == true {
-			toSend = append(toSend, m.Data...)
-			toSendEnc, err := encrypt(*sc.enc.cipher, toSend)
-			if err != nil {
-				//return err
-			}
-			toSend = toSendEnc
-		} else {
+        if sc.encryption == true {
+            toSend = append(toSend, m.Data...)
+            toSendEnc, err := encrypt(*sc.enc.cipher, toSend)
+            if err != nil {
+                //return err
+            }
+            toSend = toSendEnc
+        } else {
 
-			toSend = append(toSend, m.Data...)
+            toSend = append(toSend, m.Data...)
 
-		}
+        }
 
-		writer.Write(intToBytes(len(toSend)))
-		writer.Write(toSend)
+        writer.Write(intToBytes(len(toSend)))
+        writer.Write(toSend)
 
-		err := writer.Flush()
-		if err != nil {
-			//return err
-		}
+        err := writer.Flush()
+        if err != nil {
+            //return err
+        }
 
-		time.Sleep(2 * time.Millisecond)
+        time.Sleep(2 * time.Millisecond)
 
-	}
+    }
 
 }
 
 // getStatus - get the current status of the connection
-func (sc *Server) getStatus() Status {
+func (sc *IpcConnection) getStatus() Status {
 
-	return sc.status
+    return sc.status
 
 }
 
 // StatusCode - returns the current connection status
-func (sc *Server) StatusCode() Status {
-	return sc.status
+func (sc *IpcConnection) StatusCode() Status {
+    return sc.status
 }
 
 // Status - returns the current connection status as a string
-func (sc *Server) Status() string {
+func (sc *IpcConnection) Status() string {
 
-	return sc.status.String()
+    return sc.status.String()
 
 }
 
 // Close - closes the connection
-func (sc *Server) Close() {
+func (sc *IpcConnection) Close() {
 
-	sc.status = Closing
-	sc.listen.Close()
-	sc.conn.Close()
+    sc.status = Closing
+    sc.listen.Close()
+    sc.conn.Close()
 
 }

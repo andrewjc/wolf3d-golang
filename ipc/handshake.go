@@ -9,7 +9,7 @@ import (
 // 1st message sent from the server
 // byte 0 = protocal version no.
 // byte 1 = whether encryption is to be used - 0 no , 1 = encryption
-func (sc *Server) handshake() error {
+func (sc *IpcConnection) handshake() error {
 
 	err := sc.one()
 	if err != nil {
@@ -32,7 +32,7 @@ func (sc *Server) handshake() error {
 
 }
 
-func (sc *Server) one() error {
+func (sc *IpcConnection) one() error {
 
 	buff := make([]byte, 2)
 
@@ -71,7 +71,7 @@ func (sc *Server) one() error {
 
 }
 
-func (sc *Server) startEncryption() error {
+func (sc *IpcConnection) startEncryption() error {
 
 	shared, err := sc.keyExchange()
 	if err != nil {
@@ -93,7 +93,7 @@ func (sc *Server) startEncryption() error {
 
 }
 
-func (sc *Server) msgLength() error {
+func (sc *IpcConnection) msgLength() error {
 
 	toSend := make([]byte, 4)
 

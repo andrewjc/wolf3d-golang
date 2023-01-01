@@ -12,7 +12,7 @@ import (
 	"net"
 )
 
-func (sc *Server) keyExchange() ([32]byte, error) {
+func (sc *IpcConnection) keyExchange() ([32]byte, error) {
 
 	var shared [32]byte
 

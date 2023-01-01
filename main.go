@@ -45,31 +45,31 @@ func main() {
 	pixelgl.Run(g.GameLoop)
 }
 
-func playerMessageLoop(sc *ipc.Server) {
+func playerMessageLoop(sc *ipc.IpcServer) {
 	for {
-		m, err := sc.Read()
+		m, err := sc.Connection.Read()
 
 		if err == nil {
 			if m.MsgType > 0 {
-				log.Println("Server recieved: "+string(m.Data)+" - Message type: ", m.MsgType)
+				log.Println("IpcConnection recieved: "+string(m.Data)+" - Message type: ", m.MsgType)
 			}
 
 			handleServerPlayerMessage(sc, m)
 
 		} else {
-			log.Println("Server error")
+			log.Println("IpcConnection error")
 			log.Println(err)
 			break
 		}
 	}
 }
 
-func handleServerPlayerMessage(sc *ipc.Server, m *ipc.Message) {
+func handleServerPlayerMessage(sc *ipc.IpcServer, m *ipc.Message) {
 	if m.MsgType == 666 && string(m.Data) == "ping" {
-		sc.Write(667, []byte("pong"))
+		sc.Connection.Write(667, []byte("pong"))
 	}
 	if m.MsgType == 100 && string(m.Data) == "begin control" {
-		sc.Write(101, []byte("control granted"))
+		sc.Connection.Write(101, []byte("control granted"))
 	}
 }
 

@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-// Server create a unix socket and start listening connections - for unix and linux
-func (sc *Server) run() error {
+// IpcConnection create a unix socket and start listening connections - for unix and linux
+func (sc *IpcConnection) beginListening() error {
 
 	base := "/tmp/"
 	sock := ".sock"

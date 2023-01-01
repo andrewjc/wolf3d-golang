@@ -2,15 +2,14 @@ package ipc
 
 import (
 	"errors"
-	"github.com/Microsoft/go-winio"
 	"strings"
 	"time"
 )
 
-// Server function
+// IpcConnection function
 // Create the named pipe (if it doesn't already exist) and start listening for a client to connect.
 // when a client connects and connection is accepted the read function is called on a go routine.
-func (sc *Server) run() error {
+func (sc *IpcConnection) beginListening() error {
 
 	var pipeBase = `\\.\pipe\`
 
