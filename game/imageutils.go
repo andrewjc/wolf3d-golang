@@ -8,7 +8,7 @@ import (
 )
 
 func LoadTextures() *image.RGBA {
-	f, err := os.Open("texture.png")
+	f, err := os.Open("assets/texture.png")
 	if err != nil {
 		panic(err)
 	}
