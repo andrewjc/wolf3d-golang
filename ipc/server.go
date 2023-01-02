@@ -8,6 +8,7 @@ import (
     "bufio"
     "errors"
     "gameenv_ai/game"
+    "log"
     "time"
 )
 
@@ -89,8 +90,10 @@ func (sc *IpcConnection) acceptLoop() {
             err2 := sc.handshake()
             if err2 != nil {
                 sc.recieved <- &Message{err: err2, MsgType: -2}
-                sc.status = Error
-                sc.listen.Close()
+
+                // Reset the socket status to listening
+                sc.status = Listening
+                //sc.listen.Close()
                 sc.conn.Close()
 
             } else {
@@ -100,6 +103,7 @@ func (sc *IpcConnection) acceptLoop() {
                 sc.status = Connected
                 sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
                 sc.connChannel <- true
+                log.Println("Client connection established!")
             }
 
         }

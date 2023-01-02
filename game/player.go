@@ -140,3 +140,15 @@ func (p *Player) turnLeft(s float64) {
     p.view.plane.X = p.view.plane.X*math.Cos(s) - p.view.plane.Y*math.Sin(s)
     p.view.plane.Y = oldPlaneX*math.Sin(s) + p.view.plane.Y*math.Cos(s)
 }
+
+func (p *Player) getReward() float64 {
+    // Calculate euclidian distance between player 1 and player 2
+    p1Position := p.view.position
+    p2Position := p.game.player2Controller.player.view.position
+
+    eucDistance := math.Sqrt(math.Pow(p1Position.X-p2Position.X, 2) + math.Pow(p1Position.Y-p2Position.Y, 2))
+
+    // Calculate reward that is inversely proportional to the euclidian distance
+    reward := 1 / eucDistance
+    return reward
+}

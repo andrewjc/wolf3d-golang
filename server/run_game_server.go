@@ -31,7 +31,7 @@ func main() {
 		Config: &ipc.ServerConfig{
 			IpcName:           "wolf3d_ipc_player",
 			Timeout:           0,
-			MaxMsgSize:        1024,
+			MaxMsgSize:        1024 * 1024,
 			Encryption:        false,
 			UnmaskPermissions: false,
 		},
@@ -71,10 +71,19 @@ func handleServerPlayerMessage(sc *ipc.IpcServer, m *ipc.Message) {
 		sc.Connection.Write(667, []byte("pong"))
 	} else if m.MsgType == 100 && string(m.Data) == "begin control" {
 		sc.Connection.Write(101, []byte("control granted"))
+	} else if m.MsgType == 102 && string(m.Data) == "get observation" {
+		err := sc.Connection.Write(103, sc.Game.GetPlayer1Observation())
+		if err != nil {
+			fmt.Println("Error writing observation: ", err)
+		}
 	} else if m.MsgType == 200 {
-		actionResult := sc.Game.TakePlayer1Action(game.RLAction(m.Data[0]))
-		resultMessage := fmt.Sprintf("%v", actionResult.Reward)
-		sc.Connection.Write(201, []byte(resultMessage))
+		sc.Game.TakePlayer1Action(game.RLAction(m.Data[0]))
+		resultMessage := "action result: OK"
+
+		writeError := sc.Connection.Write(201, []byte(resultMessage))
+		if writeError != nil {
+			fmt.Println("Error writing result message: ", writeError)
+		}
 		return
 	} else if m.MsgType == -1 {
 		// Control messages
