@@ -1,3 +1,6 @@
+import base64
+import json
+
 import gym
 import numpy as np
 import socket
@@ -7,6 +10,7 @@ import cv2
 
 class GameIpcEnv(gym.Env):
     def __init__(self):
+        self.episodeNumber = 0
         self.is_connected = None
         self.action_space = gym.spaces.Discrete(4)
         self.IMG_WIDTH = 64
@@ -22,14 +26,19 @@ class GameIpcEnv(gym.Env):
 
     def step(self, action):
 
-        self.sendIpcAction(action)
+        actionResult = self.sendIpcAction(action)
 
-        obs = self.get_observation()
-        reward = 0
-        done = False
-        info = {
-            "action": action
-        }
+        obs = actionResult['Observation']
+        # base64 decode
+        obs = base64.b64decode(obs)
+
+        obs = self.imgFromStream(obs)
+
+        reward = actionResult['Reward']
+        done = actionResult['Done']
+
+        info = dict()
+        info['episode'] = self.episodeNumber
 
         return obs, reward, done, info
 
@@ -50,7 +59,7 @@ class GameIpcEnv(gym.Env):
             return
 
         print("Handshake successful, requesting control.")
-        status = self.sendMessage(100, b"begin control")
+        status = self.sendMessage(16, b"begin control")
         if status:
             msgType, msgData = self.readMessageReply()
             if msgType:
@@ -64,9 +73,9 @@ class GameIpcEnv(gym.Env):
             status = self.writeIpcHandshakeReply()
             if status:
                 status = self.readIpcMsgLenReply()
+                self.setMaxMessageLength(status)
 
                 if status:
-                    # msg len reply
                     status = self.writeIpcMsgLenReply()
 
                     return status
@@ -118,6 +127,7 @@ class GameIpcEnv(gym.Env):
                 else:
                     # convert binary to decimal
                     msgLen = int.from_bytes(data, byteorder='big')
+
                     print(f"Incoming IPC Msg Length: msgLen={msgLen}")
                     return msgLen
             except socket.timeout:
@@ -165,8 +175,15 @@ class GameIpcEnv(gym.Env):
         incomingMsgLen = self.readIpcIncomingMsgLenReply()
         if incomingMsgLen:
             try:
-                # Receive data
-                data = self.sock.recv(incomingMsgLen)
+                # Receive data using recv_into
+                data = bytearray(incomingMsgLen)
+                view = memoryview(data)
+                while incomingMsgLen:
+                    nbytes = self.sock.recv_into(view, incomingMsgLen)
+                    view = view[nbytes:]
+                    incomingMsgLen -= nbytes
+
+
                 if not data:
                     # If data is not received, the connection is probably closed
                     return None, None
@@ -185,7 +202,13 @@ class GameIpcEnv(gym.Env):
         if incomingMsgLen:
             try:
                 # Receive data
-                data = self.sock.recv(incomingMsgLen)
+                data = bytearray(incomingMsgLen)
+                view = memoryview(data)
+                while incomingMsgLen:
+                    nbytes = self.sock.recv_into(view, incomingMsgLen)
+                    view = view[nbytes:]
+                    incomingMsgLen -= nbytes
+
                 if not data:
                     # If data is not received, the connection is probably closed
                     return None, None
@@ -204,20 +227,11 @@ class GameIpcEnv(gym.Env):
                 return None, None
 
     def get_observation(self):
-        success = self.sendMessage(102, b"get observation")
+        success = self.sendMessage(18, b"get observation")
         if success:
             msgType, msgData = self.readMessageReplyBytes()
-            if msgType == 103:
-                # jpeg decompress msgData into numpy array
-                img = cv2.imdecode(np.frombuffer(msgData, np.uint8), cv2.IMREAD_COLOR)
-
-                # resize to 84x84
-                img = cv2.resize(img, (self.IMG_WIDTH, self.IMG_HEIGHT))
-
-                # normalize to 0-1
-                img = img / 255.0
-
-                img = img.reshape(self.IMG_WIDTH, self.IMG_HEIGHT, 3)
+            if msgType == 19:
+                img = self.imgFromStream(msgData)
 
                 return img
 
@@ -228,10 +242,29 @@ class GameIpcEnv(gym.Env):
         bAction = action.tobytes()
 
 
-        self.sendMessage(200, bAction)
+        self.sendMessage(20, bAction)
 
-        msgReply = self.readMessageReply()
+        msgType, msgReply = self.readMessageReplyBytes()
         if msgReply:
-            print(f"Action reply: {msgReply}")
+            msgReplyObj = json.loads(msgReply)
+            print(f"Action reply: {msgReplyObj}")
+            return msgReplyObj
+
+
+    def setMaxMessageLength(self, maxLen):
+        self.maxMessageLen = maxLen
+
+    def imgFromStream(self, msgData):
+        # jpeg decompress msgData into numpy array
+        img = cv2.imdecode(np.frombuffer(msgData, np.uint8), cv2.IMREAD_COLOR)
+
+        # resize to 84x84
+        img = cv2.resize(img, (self.IMG_WIDTH, self.IMG_HEIGHT))
+
+        # normalize to 0-1
+        img = img / 255.0
+
+        img = img.reshape(self.IMG_WIDTH, self.IMG_HEIGHT, 3)
+        return img
 
 
