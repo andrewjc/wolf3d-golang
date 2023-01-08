@@ -2,6 +2,8 @@
 
 Welcome to the Wolfenstein 3D in GoLang project! This project aims to provide a reimplementation of the classic first-person shooter game Wolfenstein 3D, written in the Go programming language, and to explore the use of machine learning techniques to train artificial neural networks to play the game.
 
+![Screenshot](assets/game_wnd.png?raw=true "Game Screenshot")
+
 ## Getting Started
 
 To get started with the project, you will need to have the following dependencies installed:
