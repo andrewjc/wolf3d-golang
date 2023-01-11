@@ -14,7 +14,7 @@ const backward_acceleration = -0.003
 const max_velocity = 0.1
 const min_velocity = -0.1
 
-func (p PlayerController) processInput(win *pixelgl.Window, dt float64) {
+func (p *PlayerController) processInput(win *pixelgl.Window, dt float64) {
 	p.processForwardBackAcceleration(win)
 
 	p.processLeftRightAcceleration(win)
@@ -226,7 +226,7 @@ func (p *PlayerController) turnLeft(s float64) {
 	p.player.view.plane.Y = oldPlaneX*math.Sin(s) + p.player.view.plane.Y*math.Cos(s)
 }
 
-func (p PlayerController) deaccelerateVelocity() {
+func (p *PlayerController) deaccelerateVelocity() {
 	if p.player.view.velocity > 0 {
 		p.player.view.velocity += backward_acceleration
 		if p.player.view.velocity < 0 {
@@ -240,7 +240,7 @@ func (p PlayerController) deaccelerateVelocity() {
 	}
 }
 
-func (p PlayerController) deaccelerateHorizontalVelocity() {
+func (p *PlayerController) deaccelerateHorizontalVelocity() {
 	if p.player.view.horizontalVelocity > 0 {
 		p.player.view.horizontalVelocity += backward_acceleration
 		if p.player.view.horizontalVelocity < 0 {

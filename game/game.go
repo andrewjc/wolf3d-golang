@@ -1,175 +1,185 @@
 package game
 
 import (
-    "github.com/faiface/pixel"
-    "github.com/faiface/pixel/pixelgl"
-    "image"
-    "image/color"
-    "math/rand"
-    "time"
+	"github.com/faiface/pixel"
+	"github.com/faiface/pixel/pixelgl"
+	"image"
+	"image/color"
+	"math/rand"
+	"time"
 )
 
 type GameInstance struct {
-    win         *pixelgl.Window
-    cfg         pixelgl.WindowConfig
-    mapData     [][]int
-    textureData []byte
-    textureMap  *image.RGBA
+	win         *pixelgl.Window
+	cfg         pixelgl.WindowConfig
+	mapData     [][]int
+	textureData []byte
+	textureMap  *image.RGBA
 
-    center pixel.Vec
+	center pixel.Vec
 
-    gameObjects     []GameObject
-    renderListener  *RenderListener
-    renderListener2 *RenderListener
+	gameObjects     []GameObject
+	renderListener  *RenderListener
+	renderListener2 *RenderListener
 
-    // Player ipc controllers
-    player1Controller *PlayerController //runner
-    player2Controller *PlayerController //chaser
+	// Runner ipc controllers
+	player1Controller *PlayerController //runner
+	player2Controller *PlayerController //chaser
 
-    // Params
-    RenderWidth      int
-    RenderHeight     int
-    RenderScale      float64
-    RenderFullscreen bool
+	// Params
+	RenderWidth      int
+	RenderHeight     int
+	RenderScale      float64
+	RenderFullscreen bool
 }
 
 func (g *GameInstance) GameLoop() {
 
-    g.gameInit()
+	rand.Seed(time.Now().UnixNano())
 
-    g.addGameObjects()
+	g.gameInit()
 
-    last := time.Now()
+	g.addGameObjects()
 
-    for !g.win.Closed() {
-        if g.win.JustPressed(pixelgl.KeyEscape) || g.win.JustPressed(pixelgl.KeyQ) {
-            return
-        }
+	last := time.Now()
 
-        g.win.Clear(color.Black)
+	for !g.win.Closed() {
+		if g.win.JustPressed(pixelgl.KeyEscape) || g.win.JustPressed(pixelgl.KeyQ) {
+			return
+		}
 
-        dt := time.Since(last).Seconds()
-        last = time.Now()
+		g.win.Clear(color.Black)
 
-        g.updateGameEntities(dt)
+		dt := time.Since(last).Seconds()
+		last = time.Now()
 
-        // Process player input
-        g.player1Controller.processInput(g.win, dt)
+		g.updateGameEntities(dt)
 
-        g.player1Controller.player.view.render()
+		// Process player input
+		g.player1Controller.processInput(g.win, dt)
 
-        p := pixel.PictureDataFromImage(g.renderListener.renderBuffer)
+		g.player1Controller.player.view.render()
 
-        pixel.NewSprite(p, p.Bounds()).
-            Draw(g.win, pixel.IM.Moved(g.center).Scaled(g.center, g.RenderScale))
+		p := pixel.PictureDataFromImage(g.renderListener.renderBuffer)
 
-        g.win.Update()
-    }
+		pixel.NewSprite(p, p.Bounds()).
+			Draw(g.win, pixel.IM.Moved(g.center).Scaled(g.center, g.RenderScale))
+
+		g.win.Update()
+	}
 }
 
 func (g *GameInstance) gameInit() {
 
-    mapGen := Map{rows: 48, cols: 48}
-    mapGen.GenerateMap()
-    g.mapData = mapGen.mapData
+	mapGen := Map{rows: 48, cols: 48}
+	mapGen.GenerateMap()
+	g.mapData = mapGen.mapData
 
-    g.textureMap = LoadTextures()
+	g.textureMap = LoadTextures()
 
-    cfg := pixelgl.WindowConfig{
-        Bounds:      pixel.R(0, 0, float64(g.RenderWidth)*g.RenderScale, float64(g.RenderHeight)*g.RenderScale),
-        VSync:       true,
-        Undecorated: false,
-        Resizable:   true,
-    }
+	cfg := pixelgl.WindowConfig{
+		Bounds:      pixel.R(0, 0, float64(g.RenderWidth)*g.RenderScale, float64(g.RenderHeight)*g.RenderScale),
+		VSync:       true,
+		Undecorated: false,
+		Resizable:   true,
+	}
 
-    if g.RenderFullscreen {
-        cfg.Monitor = pixelgl.PrimaryMonitor()
-    }
+	if g.RenderFullscreen {
+		cfg.Monitor = pixelgl.PrimaryMonitor()
+	}
 
-    win, err := pixelgl.NewWindow(cfg)
-    if err != nil {
-        panic(err)
-    }
+	win, err := pixelgl.NewWindow(cfg)
+	if err != nil {
+		panic(err)
+	}
 
-    g.center = win.Bounds().Center()
+	g.center = win.Bounds().Center()
 
-    g.win = win
-    g.cfg = cfg
+	g.win = win
+	g.cfg = cfg
 
-    g.renderListener = &RenderListener{}
-    g.renderListener2 = &RenderListener{}
+	g.renderListener = &RenderListener{}
+	g.renderListener2 = &RenderListener{}
 }
 
 func (g *GameInstance) updateGameEntities(timeDelta float64) {
-    for _, e := range g.gameObjects {
-        e.update(timeDelta)
-    }
+	for _, e := range g.gameObjects {
+		e.update(timeDelta)
+	}
 }
 
 func (g *GameInstance) getTexNum(x, y int) int {
-    return g.mapData[x][y]
+	return g.mapData[x][y]
 }
 
 func (g *GameInstance) addGameObjects() {
 
-    player1Camera := RenderView{
-        renderWidth:    640,
-        renderHeight:   480,
-        position:       getRandomStartPosition(&g.mapData),
-        direction:      pixel.V(-1.0, 0.0),
-        plane:          pixel.V(0.0, 0.66),
-        renderListener: g.renderListener}
+	player1Camera := RenderView{
+		renderWidth:    640,
+		renderHeight:   480,
+		position:       getRandomStartPosition(&g.mapData),
+		direction:      pixel.V(-1.0, 0.0),
+		plane:          pixel.V(0.0, 0.66),
+		renderListener: g.renderListener}
 
-    g.player1Controller = &PlayerController{}
-    g.player2Controller = &PlayerController{}
+	g.player1Controller = &PlayerController{}
+	g.player2Controller = &PlayerController{}
 
-    player1 := Player{
-        game:       g,
-        view:       &player1Camera,
-        controller: g.player1Controller,
-    }
+	player1 := Player{
+		game:       g,
+		view:       &player1Camera,
+		controller: g.player1Controller,
+	}
 
-    g.player1Controller.player = &player1
-    player1Camera.parent = &player1
+	g.player1Controller.player = &player1
+	player1Camera.parent = &player1
 
-    g.gameObjects = append(g.gameObjects,
-        &player1,
-    )
+	g.gameObjects = append(g.gameObjects,
+		&player1,
+	)
 
-    player2Camera := RenderView{
-        renderWidth:    320,
-        renderHeight:   240,
-        position:       getRandomStartPosition(&g.mapData),
-        direction:      pixel.V(-1.0, 0.0),
-        plane:          pixel.V(0.0, 0.66),
-        renderListener: g.renderListener2}
+	player2Camera := RenderView{
+		renderWidth:    320,
+		renderHeight:   240,
+		position:       getRandomStartPosition(&g.mapData),
+		direction:      pixel.V(-1.0, 0.0),
+		plane:          pixel.V(0.0, 0.66),
+		renderListener: g.renderListener2}
 
-    player2 := Player{
-        game:       g,
-        view:       &player2Camera,
-        controller: g.player2Controller,
-    }
-    g.player2Controller.player = &player2
+	player2 := Player{
+		game:       g,
+		view:       &player2Camera,
+		controller: g.player2Controller,
+	}
+	g.player2Controller.player = &player2
 
-    player2Camera.parent = &player2
+	player2Camera.parent = &player2
 
-    g.gameObjects = append(g.gameObjects,
-        &player2,
-    )
+	g.gameObjects = append(g.gameObjects,
+		&player2,
+	)
 }
 
 func getRandomStartPosition(mapData *[][]int) pixel.Vec {
-    // Find a random start location on the map that isn't a wall
-    // TODO Make sure the start location is not within 2 tiles of a wall
-    rand.Seed(time.Now().UnixNano())
-    var x, y int
-    for {
-        x = rand.Intn(len(*mapData))
-        y = rand.Intn(len((*mapData)[0]))
-        if (*mapData)[x][y] == 0 {
-            break
-        }
-    }
+	var x, y int
+	for {
+		x = rand.Intn(len(*mapData))
+		y = rand.Intn(len((*mapData)[0]))
+		if (*mapData)[x][y] == 0 && emptyWithin(mapData, x, y, 2) {
+			break
+		}
+	}
 
-    return pixel.V(float64(x), float64(y))
+	return pixel.V(float64(x), float64(y))
+}
+
+func emptyWithin(data *[][]int, x int, y int, radius int) bool {
+	for i := -radius; i <= radius; i++ {
+		for j := -radius; j <= radius; j++ {
+			if (*data)[x+i][y+j] != 0 {
+				return false
+			}
+		}
+	}
+	return true
 }
