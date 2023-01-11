@@ -11,9 +11,9 @@ import (
 
 var (
 	fullscreen = false
-	width      = 640
-	height     = 480
-	scale      = 1.0
+	width      = 320
+	height     = 240
+	scale      = 3.0
 )
 
 func main() {

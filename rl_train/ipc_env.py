@@ -13,10 +13,10 @@ class GameIpcEnv(gym.Env):
         self.episodeNumber = 0
         self.is_connected = None
         self.action_space = gym.spaces.Discrete(7)
-        self.IMG_WIDTH = 128
-        self.IMG_HEIGHT = 128
+        self.IMG_WIDTH = 64
+        self.IMG_HEIGHT = 64
 
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.IMG_WIDTH, self.IMG_HEIGHT, 3), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(self.IMG_WIDTH, self.IMG_HEIGHT, 3), dtype=np.uint8)
         self.connect()
 
     def reset(self):
@@ -25,6 +25,7 @@ class GameIpcEnv(gym.Env):
         return obs
 
     def step(self, action):
+        print(f"Sending action: {action}")
 
         actionResult = self.sendIpcAction(action)
 
@@ -263,7 +264,7 @@ class GameIpcEnv(gym.Env):
         img = cv2.resize(img, (self.IMG_WIDTH, self.IMG_HEIGHT))
 
         # normalize to 0-1
-        img = img / 255.0
+        #img = img / 255.0
 
         img = img.reshape(self.IMG_WIDTH, self.IMG_HEIGHT, 3)
         return img
