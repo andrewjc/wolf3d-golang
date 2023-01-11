@@ -1,9 +1,10 @@
 package game
 
-import "github.com/faiface/pixel/pixelgl"
+import (
+	"github.com/faiface/pixel"
+)
 
 type GameObject interface {
 	update(delta float64)
-	processInput(window *pixelgl.Window, timeDelta float64)
-	render(delta float64)
+	getPosition() pixel.Vec
 }

@@ -1,13 +1,15 @@
 from ipc_env import GameIpcEnv
-
+from stable_baselines3 import PPO
+from stable_baselines3 import A2C
 
 def train():
 
-    from stable_baselines3 import PPO
+
 
     env = GameIpcEnv()
 
-    model = PPO("MlpPolicy", env, verbose=1)
+    model = A2C('CnnPolicy', env, verbose=1)
+
     model.learn(total_timesteps=500000)
 
     vec_env = model.get_env()

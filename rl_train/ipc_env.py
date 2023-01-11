@@ -5,18 +5,18 @@ import gym
 import numpy as np
 import socket
 import cv2
-
+import pandas
 
 
 class GameIpcEnv(gym.Env):
     def __init__(self):
         self.episodeNumber = 0
         self.is_connected = None
-        self.action_space = gym.spaces.Discrete(4)
-        self.IMG_WIDTH = 64
-        self.IMG_HEIGHT = 64
+        self.action_space = gym.spaces.Discrete(7)
+        self.IMG_WIDTH = 128
+        self.IMG_HEIGHT = 128
 
-        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(self.IMG_WIDTH, self.IMG_HEIGHT, 3), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.IMG_WIDTH, self.IMG_HEIGHT, 3), dtype=np.uint8)
         self.connect()
 
     def reset(self):
@@ -40,7 +40,8 @@ class GameIpcEnv(gym.Env):
         info = dict()
         info['episode'] = self.episodeNumber
 
-        return obs, reward, done, info
+
+        return obs, reward, done, {}
 
     def connect(self):
         # Connect via unix socket to game process
@@ -128,7 +129,7 @@ class GameIpcEnv(gym.Env):
                     # convert binary to decimal
                     msgLen = int.from_bytes(data, byteorder='big')
 
-                    print(f"Incoming IPC Msg Length: msgLen={msgLen}")
+                    #print(f"Incoming IPC Msg Length: msgLen={msgLen}")
                     return msgLen
             except socket.timeout:
                 # Socket timeout, continue the loop
@@ -154,7 +155,7 @@ class GameIpcEnv(gym.Env):
                     continue
 
     def sendMessage(self, msgType, msgData):
-        print(f"Sending message: type={msgType}, data={msgData}")
+        #print(f"Sending message: type={msgType}, data={msgData}")
 
         try:
             bMessage = msgType.to_bytes(4, byteorder='big') + msgData
@@ -247,7 +248,7 @@ class GameIpcEnv(gym.Env):
         msgType, msgReply = self.readMessageReplyBytes()
         if msgReply:
             msgReplyObj = json.loads(msgReply)
-            print(f"Action reply: {msgReplyObj}")
+            #print(f"Action reply: {msgReplyObj}")
             return msgReplyObj
 
 
