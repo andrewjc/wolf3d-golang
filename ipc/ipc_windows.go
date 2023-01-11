@@ -2,6 +2,7 @@ package ipc
 
 import (
 	"errors"
+	"github.com/Microsoft/go-winio"
 	"strings"
 	"time"
 )

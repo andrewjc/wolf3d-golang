@@ -4,7 +4,6 @@ import "C"
 import (
 	"github.com/faiface/pixel"
 	"image"
-	"image/color"
 	"math"
 )
 
@@ -25,6 +24,7 @@ type RenderView struct {
 	horizontalVelocity float32
 
 	distanceToWall float64 // Calculated after a render cycle
+	zBuffer        [][]float64
 }
 
 type RenderListener struct {
@@ -48,6 +48,12 @@ func (c *RenderView) render() *image.RGBA {
 }
 
 func (c *RenderView) renderWalls(m *image.RGBA) {
+	// Initialize the zbuffer
+	c.zBuffer = make([][]float64, c.renderWidth)
+	for i := range c.zBuffer {
+		c.zBuffer[i] = make([]float64, c.renderHeight)
+	}
+
 	for x := 0; x < c.renderWidth; x++ {
 		var (
 			step         image.Point
@@ -153,18 +159,34 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 			d := y*256 - c.renderHeight*128 + lineHeight*128
 			texY := ((d * texSize) / lineHeight) / 256
 
-			c := c.parent.game.textureMap.RGBAAt(
+			col := c.parent.game.textureMap.RGBAAt(
 				texX+texSize*(texNum),
 				texY%texSize,
 			)
 
 			if side {
-				c.R = c.R / 2
-				c.G = c.G / 2
-				c.B = c.B / 2
+				col.R = col.R / 2
+				col.G = col.G / 2
+				col.B = col.B / 2
 			}
 
-			m.Set(x, y, c)
+			// Simulate diming the light as the player gets closer to the wall
+			// percentage of perpWallDist / maxRenderDistance
+			// 1.0 = 100% = full brightness
+			// 0.0 = 0% = black
+			maxDistance := math.Max(float64(len(c.parent.game.mapData)), float64(len(c.parent.game.mapData[0])))
+			percentage := perpWallDist / maxDistance
+			// invert percentage
+			percentage = 1.0 - percentage
+
+			percentage = applyDistanceFalloff(percentage, perpWallDist)
+
+			// scale the color by the percentage
+			col.R = uint8(float64(col.R) * percentage)
+			col.G = uint8(float64(col.G) * percentage)
+			col.B = uint8(float64(col.B) * percentage)
+
+			m.Set(x, y, col)
 		}
 
 		var floorWall pixel.Vec
@@ -198,11 +220,57 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 			fx := int(currentFloor.X*float64(texSize)) % texSize
 			fy := int(currentFloor.Y*float64(texSize)) % texSize
 
-			m.Set(x, y, c.parent.game.textureMap.At(fx, fy))
+			perpFloorDist := currentDist
 
-			m.Set(x, c.renderHeight-y-1, c.parent.game.textureMap.At(fx+(4*texSize), fy))
-			m.Set(x, c.renderHeight-y, c.parent.game.textureMap.At(fx+(4*texSize), fy))
+			// Render floor
+			// Simulate diming the light as the player gets closer to the wall
+			// percentage of perpWallDist / maxRenderDistance
+			// 1.0 = 100% = full brightness
+			// 0.0 = 0% = black
+			maxDistance := math.Max(float64(len(c.parent.game.mapData)), float64(len(c.parent.game.mapData[0])))
+			percentage := perpFloorDist / maxDistance
+			// invert percentage
+			percentage = 1.0 - percentage
+
+			percentage = applyDistanceFalloff(percentage, perpFloorDist)
+
+			// scale the color by the percentage
+			col := c.parent.game.textureMap.RGBAAt(fx, fy)
+			col.R = uint8(float64(col.R) * percentage)
+			col.G = uint8(float64(col.G) * percentage)
+			col.B = uint8(float64(col.B) * percentage)
+
+			m.Set(x, y, col)
+
+			// Render roof
+			col = c.parent.game.textureMap.RGBAAt(fx+(4*texSize), fy)
+			col.R = uint8(float64(col.R) * percentage)
+			col.G = uint8(float64(col.G) * percentage)
+			col.B = uint8(float64(col.B) * percentage)
+			m.Set(x, c.renderHeight-y-1, col)
+			m.Set(x, c.renderHeight-y, col)
+
+			// Save this pixel to the z-buffer
+			c.zBuffer[x][y] = perpWallDist
 		}
+	}
+}
+
+func applyDistanceFalloff(percentage float64, dist float64) float64 {
+	if dist > 3 && dist <= 5 {
+		return percentage * 0.8
+	} else if dist > 5 && dist <= 7 {
+		return percentage * 0.7
+	} else if dist > 7 && dist <= 10 {
+		return percentage * 0.6
+	} else if dist > 10 && dist <= 15 {
+		return percentage * 0.5
+	} else if dist > 15 && dist <= 20 {
+		return percentage * 0.4
+	} else if dist > 20 {
+		return percentage * 0.3
+	} else {
+		return percentage
 	}
 }
 
@@ -243,13 +311,14 @@ func (c *RenderView) renderThings(m *image.RGBA) {
 		}
 
 		for stripe := drawStartX; stripe < drawEndX; stripe++ {
-			//texX := int(256*(stripe-(drawStartX-spriteWidth/2))*texSize/spriteWidth) / 256
-			if transformY > 0 && stripe > 0 && stripe < c.renderWidth { // && transformY < c.zBuffer[stripe] {
+			texX := int(256*(stripe-(drawStartX-spriteWidth/2))*texSize/spriteWidth) / 256
+			if transformY > 0 && stripe > 0 && stripe < c.renderWidth {
 				for y := drawStartY; y < drawEndY; y++ {
-					//d := y*256 - c.renderHeight*128 + spriteHeight*128
-					//texY := ((d * texSize) / spriteHeight) / 256
-					//c := c.parent.game.textureMap.RGBAAt(texX+texSize*4, texY%texSize)
-					c := color.RGBA{129, 127, 124, 0}
+
+					d := y*256 - c.renderHeight*128 + spriteHeight*128
+					texY := ((d * texSize) / spriteHeight) / 256
+					c := c.parent.game.textureMap.RGBAAt(texX+texSize*2.5, texY%texSize)
+					//c := color.RGBA{129, 127, 124, 0}
 					if c.R != 0 {
 						m.Set(stripe, y, c)
 					}
