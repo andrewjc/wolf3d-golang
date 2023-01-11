@@ -31,6 +31,8 @@ type GameInstance struct {
 	RenderHeight     int
 	RenderScale      float64
 	RenderFullscreen bool
+
+	currentTick int64
 }
 
 func (g *GameInstance) GameLoop() {
@@ -52,6 +54,8 @@ func (g *GameInstance) GameLoop() {
 
 		dt := time.Since(last).Seconds()
 		last = time.Now()
+
+		g.currentTick = last.UnixMilli()
 
 		g.updateGameEntities(dt)
 
@@ -174,9 +178,15 @@ func getRandomStartPosition(mapData *[][]int) pixel.Vec {
 }
 
 func emptyWithin(data *[][]int, x int, y int, radius int) bool {
+	maxX := len((*data)) - 1
+	maxY := len((*data)[0]) - 1
+
 	for i := -radius; i <= radius; i++ {
 		for j := -radius; j <= radius; j++ {
-			if (*data)[x+i][y+j] != 0 {
+			if (x+i) < 0 || (x+i) > maxX || (y+j) < 0 || (y+j) > maxY {
+				continue
+			}
+			if (i*i+j*j) <= radius*radius && (*data)[x+i][y+j] != 0 {
 				return false
 			}
 		}
