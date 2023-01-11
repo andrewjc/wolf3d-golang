@@ -180,6 +180,9 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 			percentage = 1.0 - percentage
 
 			percentage = applyDistanceFalloff(percentage, perpWallDist)
+			if percentage < 1e-6 {
+				percentage = 1e-6
+			}
 
 			// scale the color by the percentage
 			col.R = uint8(float64(col.R) * percentage)
@@ -233,6 +236,9 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 			percentage = 1.0 - percentage
 
 			percentage = applyDistanceFalloff(percentage, perpFloorDist)
+			if percentage < 1e-6 {
+				percentage = 1e-6
+			}
 
 			// scale the color by the percentage
 			col := c.parent.game.textureMap.RGBAAt(fx, fy)
@@ -240,6 +246,7 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 			col.G = uint8(float64(col.G) * percentage)
 			col.B = uint8(float64(col.B) * percentage)
 
+			// Render floor
 			m.Set(x, y, col)
 
 			// Render roof
@@ -251,15 +258,15 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 			m.Set(x, c.renderHeight-y, col)
 
 			// Save this pixel to the z-buffer
-			c.zBuffer[x][y] = perpWallDist
+			c.zBuffer[x][y] = perpFloorDist
 		}
 	}
 }
 
 func applyDistanceFalloff(percentage float64, dist float64) float64 {
-	if dist > 3 && dist <= 5 {
+	if dist > 0 && dist <= 2 {
 		return percentage * 0.8
-	} else if dist > 5 && dist <= 7 {
+	} else if dist > 2 && dist <= 7 {
 		return percentage * 0.7
 	} else if dist > 7 && dist <= 10 {
 		return percentage * 0.6
