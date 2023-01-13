@@ -46,8 +46,12 @@ class GameIpcEnv(gym.Env):
 
     def connect(self):
         # Connect via unix socket to game process
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.connect("/tmp/wolf3d_ipc_player.sock")
+        #self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        #self.sock.connect("/tmp/wolf3d_ipc_player.sock")
+
+        # if on windows used a named pipe instead
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect("\\.\pipe\wolf3d_ipc_player.sock")
 
         self.is_connected = True
 

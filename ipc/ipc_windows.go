@@ -2,46 +2,46 @@ package ipc
 
 import (
 	"errors"
-	"github.com/Microsoft/go-winio"
+	"net"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// IpcConnection function
-// Create the named pipe (if it doesn't already exist) and start listening for a client to connect.
-// when a client connects and connection is accepted the read function is called on a go routine.
+// IpcConnection create a unix socket and start listening connections - for unix and linux
 func (sc *IpcConnection) beginListening() error {
 
-	var pipeBase = `\\.\pipe\`
+	base := "0.0.0.0"
+	port := strconv.Itoa(sc.port)
 
-	listen, err := winio.ListenPipe(pipeBase+sc.name, nil)
+	listen, err := net.Listen("tcp4", base+":"+port)
+
 	if err != nil {
-
 		return err
 	}
 
 	sc.listen = listen
 
 	sc.status = Listening
-
+	sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
 	sc.connChannel = make(chan bool)
 
 	go sc.acceptLoop()
 
-	err2 := sc.connectionTimer()
-	if err2 != nil {
-		return err2
+	err = sc.connectionTimer()
+	if err != nil {
+		return err
 	}
 
 	return nil
 
 }
 
-// Client function
-// dial - attempts to connect to a named pipe created by the server
+// Client connect to the unix socket created by the server -  for unix and linux
 func (cc *Client) dial() error {
 
-	var pipeBase = `\\.\pipe\`
+	base := "/tmp/"
+	sock := ".sock"
 
 	startTime := time.Now()
 
@@ -52,27 +52,32 @@ func (cc *Client) dial() error {
 				return errors.New("Timed out trying to connect")
 			}
 		}
-		pn, err := winio.DialPipe(pipeBase+cc.Name, nil)
+
+		conn, err := net.Dial("unix", base+cc.Name+sock)
 		if err != nil {
 
-			if strings.Contains(err.Error(), "The system cannot find the file specified.") == true {
+			if strings.Contains(err.Error(), "connect: no such file or directory") == true {
+
+			} else if strings.Contains(err.Error(), "connect: connection refused") == true {
 
 			} else {
-				return err
+				cc.recieved <- &Message{err: err, MsgType: -2}
 			}
 
 		} else {
 
-			cc.conn = pn
+			cc.conn = conn
 
 			err = cc.handshake()
 			if err != nil {
 				return err
 			}
+
 			return nil
 		}
 
 		time.Sleep(cc.retryTimer * time.Second)
 
 	}
+
 }

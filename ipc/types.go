@@ -22,6 +22,7 @@ type IpcConnection struct {
 	maxMsgSize  int
 	enc         *encryption
 	unMask      bool
+	port        int
 }
 
 // Client - holds the details of the client connection and config.
@@ -79,6 +80,7 @@ type ServerConfig struct {
 	MaxMsgSize        int
 	Encryption        bool
 	UnmaskPermissions bool
+	Port              int
 }
 
 // ClientConfig - used to pass configuation overrides to ClientStart()

@@ -14,6 +14,7 @@ var (
 	width      = 320
 	height     = 240
 	scale      = 3.0
+	port       = 0 // random
 )
 
 func main() {
@@ -21,6 +22,7 @@ func main() {
 	flag.IntVar(&width, "w", width, "width")
 	flag.IntVar(&height, "h", height, "height")
 	flag.Float64Var(&scale, "s", scale, "scale")
+	flag.IntVar(&port, "p", port, "port")
 	flag.Parse()
 
 	g := newGame(width, height, scale, fullscreen)
@@ -30,6 +32,7 @@ func main() {
 		Game: g,
 		Config: &ipc.ServerConfig{
 			IpcName: "wolf3d_ipc_player",
+			Port:    port,
 			Timeout: 0,
 			//MaxMsgSize:        1024 * 1024 * 10,
 			Encryption:        false,
