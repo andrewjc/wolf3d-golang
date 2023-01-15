@@ -16,6 +16,8 @@ type GameInstance struct {
 	lights      []LightSource
 	textureData []byte
 	textureMap  *image.RGBA
+	normalMap   *image.RGBA
+	dispMap     *image.RGBA
 
 	center pixel.Vec
 
@@ -35,6 +37,8 @@ type GameInstance struct {
 
 	currentTick      int64
 	episodeStartTick int64
+
+	previousEucDistance float64
 }
 
 func (g *GameInstance) GameLoop() {
@@ -42,6 +46,7 @@ func (g *GameInstance) GameLoop() {
 	rand.Seed(time.Now().UnixNano())
 
 	g.episodeStartTick = time.Now().UnixMilli()
+	g.previousEucDistance = 0
 
 	g.gameInit()
 
@@ -85,7 +90,9 @@ func (g *GameInstance) gameInit() {
 	g.mapData = mapGen.mapData
 	g.lights = mapGen.lights
 
-	g.textureMap = LoadTextures()
+	g.textureMap = textureToImage("assets/texture.png")
+	g.normalMap = textureToImage("assets/normal.png")
+	g.dispMap = textureToImage("assets/disp.png")
 
 	cfg := pixelgl.WindowConfig{
 		Bounds:      pixel.R(0, 0, float64(g.RenderWidth)*g.RenderScale, float64(g.RenderHeight)*g.RenderScale),

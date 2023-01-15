@@ -237,6 +237,7 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 				}
 
 				// scale the color by the percentage
+
 				col := c.parent.(*Player).game.textureMap.RGBAAt(fx, fy)
 				col.R = uint8(float64(col.R) * percentage)
 				col.G = uint8(float64(col.G) * percentage)

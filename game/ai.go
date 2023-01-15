@@ -75,7 +75,9 @@ func (g *GameInstance) TakePlayer1Action(action_id RLAction) RLActionResult {
 	p1Obs := g.GetPlayer1Observation()
 	episodeLength := g.currentTick - g.episodeStartTick
 
-	done := g.player1Controller.player.isDone() || episodeLength >= maxEpisodeLength
+	print("Episode length: ", episodeLength)
+
+	done := g.player1Controller.player.isDone()
 
 	return RLActionResult{Reward: reward, Observation: p1Obs, Done: done, Info: ""}
 }

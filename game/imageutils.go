@@ -7,8 +7,8 @@ import (
 	"os"
 )
 
-func LoadTextures() *image.RGBA {
-	f, err := os.Open("assets/texture.png")
+func textureToImage(filename string) *image.RGBA {
+	f, err := os.Open(filename)
 	if err != nil {
 		panic(err)
 	}

@@ -8,7 +8,7 @@ def train():
 
     env = GameIpcEnv()
 
-    model = A2C('CnnPolicy', env, verbose=1)
+    model = PPO('CnnPolicy', env, verbose=1)
 
     model.learn(total_timesteps=500000)
 
