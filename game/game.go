@@ -13,6 +13,7 @@ type GameInstance struct {
 	win         *pixelgl.Window
 	cfg         pixelgl.WindowConfig
 	mapData     [][]int
+	lights      []LightSource
 	textureData []byte
 	textureMap  *image.RGBA
 
@@ -82,6 +83,7 @@ func (g *GameInstance) gameInit() {
 	mapGen := Map{rows: 48, cols: 48}
 	mapGen.GenerateMap()
 	g.mapData = mapGen.mapData
+	g.lights = mapGen.lights
 
 	g.textureMap = LoadTextures()
 

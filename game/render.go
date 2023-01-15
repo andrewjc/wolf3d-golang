@@ -9,6 +9,8 @@ import (
 
 const texSize = 64
 
+var renderCeilingFloor = true
+
 type RenderView struct {
 	parent         interface{}
 	renderListener *RenderListener
@@ -34,12 +36,15 @@ type RenderListener struct {
 func (c *RenderView) render() *image.RGBA {
 	m := image.NewRGBA(image.Rect(0, 0, c.renderWidth, c.renderHeight))
 
+	// Initialize the zbuffer
+	c.zBuffer = make([][]float64, c.renderWidth)
+	for i := range c.zBuffer {
+		c.zBuffer[i] = make([]float64, c.renderHeight)
+	}
+
 	c.renderWalls(m)
 
 	c.renderThings(m)
-
-	// Add code here to render the enemy position as a floating sphere
-	// based on the enemy's position and the player's position
 
 	if c.renderListener != nil {
 		c.renderListener.renderBuffer = m
@@ -48,34 +53,25 @@ func (c *RenderView) render() *image.RGBA {
 }
 
 func (c *RenderView) renderWalls(m *image.RGBA) {
-	// Initialize the zbuffer
-	c.zBuffer = make([][]float64, c.renderWidth)
-	for i := range c.zBuffer {
-		c.zBuffer[i] = make([]float64, c.renderHeight)
-	}
 
 	for x := 0; x < c.renderWidth; x++ {
-		var (
-			step         image.Point
-			sideDist     pixel.Vec
-			perpWallDist float64
-			hit, side    bool
+		var step image.Point
 
-			worldX, worldY = int(c.position.X), int(c.position.Y)
+		worldX, worldY := int(c.position.X), int(c.position.Y)
 
-			cameraX = 2*float64(x)/float64(c.renderWidth) - 1
+		cameraX := 2*float64(x)/float64(c.renderWidth) - 1
 
-			rayDir = pixel.V(
-				c.direction.X+c.plane.X*cameraX,
-				c.direction.Y+c.plane.Y*cameraX,
-			)
-
-			deltaDist = pixel.V(
-				math.Sqrt(1.0+(rayDir.Y*rayDir.Y)/(rayDir.X*rayDir.X)),
-				math.Sqrt(1.0+(rayDir.X*rayDir.X)/(rayDir.Y*rayDir.Y)),
-			)
+		rayDir := pixel.V(
+			c.direction.X+c.plane.X*cameraX,
+			c.direction.Y+c.plane.Y*cameraX,
 		)
 
+		deltaDist := pixel.V(
+			math.Sqrt(1.0+(rayDir.Y*rayDir.Y)/(rayDir.X*rayDir.X)),
+			math.Sqrt(1.0+(rayDir.X*rayDir.X)/(rayDir.Y*rayDir.Y)),
+		)
+
+		var sideDist pixel.Vec
 		if rayDir.X < 0 {
 			step.X = -1
 			sideDist.X = (c.position.X - float64(int(c.position.X))) * deltaDist.X
@@ -92,6 +88,8 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 			sideDist.Y = (float64(int(c.position.Y)) + 1.0 - c.position.Y) * deltaDist.Y
 		}
 
+		var hit bool
+		var side bool
 		for !hit {
 			if sideDist.X < sideDist.Y {
 				sideDist.X += deltaDist.X
@@ -112,6 +110,7 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 		}
 
 		var wallX float64
+		var perpWallDist float64
 
 		if side {
 			perpWallDist = (float64(worldY) - c.position.Y + (1-float64(step.Y))/2) / rayDir.Y
@@ -156,12 +155,11 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 		texNum := c.parent.(*Player).game.getTexNum(worldX, worldY)
 
 		for y := drawStart; y < drawEnd+1; y++ {
-			d := y*256 - c.renderHeight*128 + lineHeight*128
-			texY := ((d * texSize) / lineHeight) / 256
+			texY := (float64(y) - float64(c.renderHeight)/2 + float64(lineHeight)/2) * texSize / float64(lineHeight)
 
 			col := c.parent.(*Player).game.textureMap.RGBAAt(
 				texX+texSize*(texNum),
-				texY%texSize,
+				int(texY)%texSize,
 			)
 
 			if side {
@@ -170,10 +168,6 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 				col.B = col.B / 2
 			}
 
-			// Simulate diming the light as the player gets closer to the wall
-			// percentage of perpWallDist / maxRenderDistance
-			// 1.0 = 100% = full brightness
-			// 0.0 = 0% = black
 			maxDistance := math.Max(float64(len(c.parent.(*Player).game.mapData)), float64(len(c.parent.(*Player).game.mapData[0])))
 			percentage := perpWallDist / maxDistance
 			// invert percentage
@@ -190,76 +184,83 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 			col.B = uint8(float64(col.B) * percentage)
 
 			m.Set(x, y, col)
+
+			// Calculate the zbuffer
+			zBufferValue := perpWallDist
+			// Store the zBuffer value in the zBuffer array
+			c.zBuffer[x][y] = zBufferValue
 		}
 
-		var floorWall pixel.Vec
+		if renderCeilingFloor {
 
-		if !side && rayDir.X > 0 {
-			floorWall.X = float64(worldX)
-			floorWall.Y = float64(worldY) + wallX
-		} else if !side && rayDir.X < 0 {
-			floorWall.X = float64(worldX) + 1.0
-			floorWall.Y = float64(worldY) + wallX
-		} else if side && rayDir.Y > 0 {
-			floorWall.X = float64(worldX) + wallX
-			floorWall.Y = float64(worldY)
-		} else {
-			floorWall.X = float64(worldX) + wallX
-			floorWall.Y = float64(worldY) + 1.0
-		}
+			var floorWall pixel.Vec
 
-		distWall, distPlayer := perpWallDist, 0.0
-
-		for y := drawEnd + 1; y < c.renderHeight; y++ {
-			currentDist := float64(c.renderHeight) / (2.0*float64(y) - float64(c.renderHeight))
-
-			weight := (currentDist - distPlayer) / (distWall - distPlayer)
-
-			currentFloor := pixel.V(
-				weight*floorWall.X+(1.0-weight)*c.position.X,
-				weight*floorWall.Y+(1.0-weight)*c.position.Y,
-			)
-
-			fx := int(currentFloor.X*float64(texSize)) % texSize
-			fy := int(currentFloor.Y*float64(texSize)) % texSize
-
-			perpFloorDist := currentDist
-
-			// Render floor
-			// Simulate diming the light as the player gets closer to the wall
-			// percentage of perpWallDist / maxRenderDistance
-			// 1.0 = 100% = full brightness
-			// 0.0 = 0% = black
-			maxDistance := math.Max(float64(len(c.parent.(*Player).game.mapData)), float64(len(c.parent.(*Player).game.mapData[0])))
-			percentage := perpFloorDist / maxDistance
-			// invert percentage
-			percentage = 1.0 - percentage
-
-			percentage = applyDistanceFalloff(percentage, perpFloorDist)
-			if percentage < 1e-6 {
-				percentage = 1e-6
+			if !side && rayDir.X > 0 {
+				floorWall.X = float64(worldX)
+				floorWall.Y = float64(worldY) + wallX
+			} else if !side && rayDir.X < 0 {
+				floorWall.X = float64(worldX) + 1.0
+				floorWall.Y = float64(worldY) + wallX
+			} else if side && rayDir.Y > 0 {
+				floorWall.X = float64(worldX) + wallX
+				floorWall.Y = float64(worldY)
+			} else {
+				floorWall.X = float64(worldX) + wallX
+				floorWall.Y = float64(worldY) + 1.0
 			}
 
-			// scale the color by the percentage
-			col := c.parent.(*Player).game.textureMap.RGBAAt(fx, fy)
-			col.R = uint8(float64(col.R) * percentage)
-			col.G = uint8(float64(col.G) * percentage)
-			col.B = uint8(float64(col.B) * percentage)
+			distWall, distPlayer := perpWallDist, 0.0
 
-			// Render floor
-			m.Set(x, y, col)
+			for y := drawEnd + 1; y < c.renderHeight; y++ {
+				currentDist := float64(c.renderHeight) / (2.0*float64(y) - float64(c.renderHeight))
 
-			// Render roof
-			col = c.parent.(*Player).game.textureMap.RGBAAt(fx+(4*texSize), fy)
-			col.R = uint8(float64(col.R) * percentage)
-			col.G = uint8(float64(col.G) * percentage)
-			col.B = uint8(float64(col.B) * percentage)
-			m.Set(x, c.renderHeight-y-1, col)
-			m.Set(x, c.renderHeight-y, col)
+				weight := (currentDist - distPlayer) / (distWall - distPlayer)
 
-			// Save this pixel to the z-buffer
-			c.zBuffer[x][y] = perpFloorDist
+				currentFloor := pixel.V(
+					weight*floorWall.X+(1.0-weight)*c.position.X,
+					weight*floorWall.Y+(1.0-weight)*c.position.Y,
+				)
+
+				fx := int(currentFloor.X*float64(texSize)) % texSize
+				fy := int(currentFloor.Y*float64(texSize)) % texSize
+
+				perpFloorDist := currentDist
+
+				maxDistance := math.Max(float64(len(c.parent.(*Player).game.mapData)), float64(len(c.parent.(*Player).game.mapData[0])))
+				percentage := perpFloorDist / maxDistance
+				// invert percentage
+				percentage = 1.0 - percentage
+
+				percentage = applyDistanceFalloff(percentage, perpFloorDist)
+				if percentage < 1e-6 {
+					percentage = 1e-6
+				}
+
+				// scale the color by the percentage
+				col := c.parent.(*Player).game.textureMap.RGBAAt(fx, fy)
+				col.R = uint8(float64(col.R) * percentage)
+				col.G = uint8(float64(col.G) * percentage)
+				col.B = uint8(float64(col.B) * percentage)
+
+				// Render floor
+				m.Set(x, y, col)
+				c.zBuffer[x][y] = perpFloorDist
+
+				// Render roof
+				col = c.parent.(*Player).game.textureMap.RGBAAt(fx+(4*texSize), fy)
+				col.R = uint8(float64(col.R) * percentage)
+				col.G = uint8(float64(col.G) * percentage)
+				col.B = uint8(float64(col.B) * percentage)
+				m.Set(x, c.renderHeight-y-1, col)
+				m.Set(x, c.renderHeight-y, col)
+
+				// Save this pixel to the z-buffer
+				c.zBuffer[x][c.renderHeight-y-1] = perpFloorDist
+				c.zBuffer[x][c.renderHeight-y] = perpFloorDist
+			}
+
 		}
+
 	}
 }
 
@@ -275,7 +276,7 @@ func init() {
 	for i := 0.0; i <= darkestDistance; i += 0.25 {
 		falloffPercentages[i] = light
 		if light > darkest {
-			light -= 0.01
+			light -= 0.005
 		}
 	}
 	darkest = light
@@ -297,53 +298,53 @@ func roundDownToClosest(f float64) float64 {
 	return math.Floor(f)
 }
 
-func (c *RenderView) renderThings(m *image.RGBA) {
-	for _, t := range c.parent.(*Player).game.gameObjects {
-		//if t == c.parent.game.player {
-		//    continue
-		// }
+func (r *RenderView) renderThings(m *image.RGBA) {
+	for _, t := range r.parent.(*Player).game.gameObjects {
 
-		x := t.getPosition().X - c.position.X
-		y := t.getPosition().Y - c.position.Y
+		x := t.getPosition().X - r.position.X
+		y := t.getPosition().Y - r.position.Y
 
-		invDet := 1.0 / (c.plane.X*c.direction.Y - c.direction.X*c.plane.Y)
+		invDet := 1.0 / (r.plane.X*r.direction.Y - r.direction.X*r.plane.Y)
 
-		transformX := invDet * (c.direction.Y*x - c.direction.X*y)
-		transformY := invDet * (-c.plane.Y*x + c.plane.X*y)
+		transformX := invDet * (r.direction.Y*x - r.direction.X*y)
+		transformY := invDet * (-r.plane.Y*x + r.plane.X*y)
 
-		spriteScreenX := int((float64(c.renderWidth) / 2) * (1 + transformX/transformY))
+		objectPerpDist := transformY
 
-		spriteHeight := int(math.Abs(float64(c.renderHeight) / transformY))
-		drawStartY := -spriteHeight/2 + c.renderHeight/2
+		spriteScreenX := int((float64(r.renderWidth) / 2) * (1 + transformX/transformY))
+
+		spriteHeight := int(math.Abs(float64(r.renderHeight) / transformY))
+		drawStartY := -spriteHeight/2 + r.renderHeight/2
 		if drawStartY < 0 {
 			drawStartY = 0
 		}
-		drawEndY := spriteHeight/2 + c.renderHeight/2
-		if drawEndY >= c.renderHeight {
-			drawEndY = c.renderHeight - 1
+		drawEndY := spriteHeight/2 + r.renderHeight/2
+		if drawEndY >= r.renderHeight {
+			drawEndY = r.renderHeight - 1
 		}
 
-		spriteWidth := int(math.Abs(float64(c.renderHeight) / transformY))
+		spriteWidth := int(math.Abs(float64(r.renderHeight) / transformY))
 		drawStartX := -spriteWidth/2 + spriteScreenX
 		if drawStartX < 0 {
 			drawStartX = 0
 		}
 		drawEndX := spriteWidth/2 + spriteScreenX
-		if drawEndX >= c.renderWidth {
-			drawEndX = c.renderWidth - 1
+		if drawEndX >= r.renderWidth {
+			drawEndX = r.renderWidth - 1
 		}
 
-		for stripe := drawStartX; stripe < drawEndX; stripe++ {
-			texX := int(256*(stripe-(drawStartX-spriteWidth/2))*texSize/spriteWidth) / 256
-			if transformY > 0 && stripe > 0 && stripe < c.renderWidth {
+		for xx := drawStartX; xx < drawEndX; xx++ {
+			texX := int(256*(xx-(drawStartX-spriteWidth/2))*texSize/spriteWidth) / 256
+			if transformY > 0 && xx > 0 && xx < r.renderWidth {
 				for y := drawStartY; y < drawEndY; y++ {
-
-					d := y*256 - c.renderHeight*128 + spriteHeight*128
+					d := y*256 - r.renderHeight*128 + spriteHeight*128
 					texY := ((d * texSize) / spriteHeight) / 256
-					c := c.parent.(*Player).game.textureMap.RGBAAt(texX+texSize*2.5, texY%texSize)
+					c := r.parent.(*Player).game.textureMap.RGBAAt(texX+texSize*2.5, texY%texSize)
 
 					if c.R != 0 {
-						m.Set(stripe, y, c)
+						if r.zBuffer[xx][y] > objectPerpDist {
+							m.Set(xx, y, c)
+						}
 					}
 				}
 			}

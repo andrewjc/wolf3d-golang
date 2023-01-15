@@ -18,3 +18,11 @@ func (p *Enemy) update(delta float64) {
 func (p *Enemy) getPosition() pixel.Vec {
 	return p.view.position
 }
+
+func (p *Enemy) getRotation() pixel.Vec {
+	return p.view.direction
+}
+
+func (p *Enemy) getPlane() pixel.Vec {
+	return p.view.plane
+}

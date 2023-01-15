@@ -21,6 +21,14 @@ func (p *Player) getPosition() pixel.Vec {
 	return p.view.position
 }
 
+func (p *Player) getRotation() pixel.Vec {
+	return p.view.direction
+}
+
+func (p *Player) getPlane() pixel.Vec {
+	return p.view.plane
+}
+
 func (p *Player) getReward() float64 {
 	// Calculate euclidean distance between player 1 and player 2
 	p1Position := p.view.position

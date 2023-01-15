@@ -7,4 +7,5 @@ import (
 type GameObject interface {
 	update(delta float64)
 	getPosition() pixel.Vec
+	getRotation() pixel.Vec
 }
