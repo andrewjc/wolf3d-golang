@@ -1,6 +1,6 @@
 # Wolfenstein 3D in GoLang
 
-Welcome to the Wolfenstein 3D in GoLang project! This project aims to provide a reimplementation of the classic first-person shooter game Wolfenstein 3D, written in the Go programming language, and to explore the use of machine learning techniques to train artificial neural networks to play the game.
+Welcome to the Navigating Raycasting Worlds project! This project aims to provide a custom raycasting game engine written in GoLang, reminiscent of the classic Wolf3D game, and to explore the use of reinforcement learning techniques to train artificial agents to navigate through randomly generated maps.
 
 ![Screenshot](assets/screenshot.png?raw=true "Game Screenshot")
 
