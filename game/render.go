@@ -27,6 +27,8 @@ type RenderView struct {
 
 	distanceToWall float64 // Calculated after a render cycle
 	zBuffer        [][]float64
+	old_position   pixel.Vec
+	is_moving      bool
 }
 
 type RenderListener struct {

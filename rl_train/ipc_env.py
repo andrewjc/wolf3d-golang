@@ -1,15 +1,21 @@
 import base64
 import json
+import time
 
 import gym
+import numpy
 import numpy as np
 import socket
 import cv2
 import pandas
+from gym.utils import seeding
+from gym import utils
 
 
-class GameIpcEnv(gym.Env):
+class GameIpcEnv(gym.Env, utils.EzPickle):
     def __init__(self):
+        utils.EzPickle.__init__(self)
+        self._seed(seed=time.time_ns())
         self.episodeNumber = 0
         self.is_connected = None
         self.action_space = gym.spaces.Discrete(7)
@@ -20,14 +26,37 @@ class GameIpcEnv(gym.Env):
         self.connect()
 
     def reset(self):
-        obs = self.get_observation()
+        print("reset")
+        self.sendMessage(13, b"reset")
+        msgType, msgData = self.readMessageReply()
+        if msgType == 14:
+            return self.get_observation()
 
-        return obs
+        return None
+
+
+    def _seed(self, seed=None):
+        self.np_random, seed1 = seeding.np_random(seed)
+        return [seed1]
+
+    def get_action_meanings(self):
+        ACTION_MEANING = {
+            0: "NOOP",
+            1: "FORWARD",
+            2: "BACKWARD",
+            3: "STRAFE_LEFT",
+            4: "STRATE_RIGHT",
+            5: "TURN_LEFT",
+            6: "TURN_RIGHT",
+        }
+        return [ACTION_MEANING[i] for i in range(0, self.action_space.n)]
 
     def step(self, action):
-        print(f"Sending action: {action}")
-
         actionResult = self.sendIpcAction(action)
+
+        if actionResult is None:
+            return None, 0.0, True, {}
+
 
         obs = actionResult['Observation']
         # base64 decode
@@ -39,12 +68,15 @@ class GameIpcEnv(gym.Env):
         done = actionResult['Done']
 
         info = dict()
-        info['episode'] = self.episodeNumber
-
-        print(f"Action reward: {reward}, done: {done}")
-
+        info['episode'] = dict()
+        if done:
+            info['episode']['r'] = reward
+            self.episodeNumber += 1
 
         return obs, reward, done, {}
+
+    def render(self, **kwargs) -> None:
+        print("render")
 
     def connect(self):
         # Connect via unix socket to game process
@@ -66,12 +98,9 @@ class GameIpcEnv(gym.Env):
             print("Handshake failed")
             return
 
-        print("Handshake successful, requesting control.")
         status = self.sendMessage(16, b"begin control")
         if status:
             msgType, msgData = self.readMessageReply()
-            if msgType:
-                print(f"Control granted.")
 
 
     def performHandshake(self):
@@ -100,7 +129,6 @@ class GameIpcEnv(gym.Env):
             else:
                 proto_version = data[0]
                 proto_encrypted = data[1]
-                print(f"IPC Handshake: version={proto_version}, encrypted={proto_encrypted}")
                 return True
         except socket.timeout:
             # Socket timeout, continue the loop
@@ -155,7 +183,6 @@ class GameIpcEnv(gym.Env):
                     else:
                         # convert binary to decimal
                         msgLen = int.from_bytes(data, byteorder='big')
-                        print(f"Set Max Msg Length: msgLen={msgLen}")
                         return msgLen
                 except socket.timeout:
                     # Socket timeout, continue the loop
@@ -168,11 +195,13 @@ class GameIpcEnv(gym.Env):
             bMessage = msgType.to_bytes(4, byteorder='big') + msgData
             msgLength = len(bMessage)
 
-
             # send msgType as a series of bytes
-            self.sock.send(msgLength.to_bytes(4, byteorder='big'))
-
-            self.sock.send(bMessage)
+            try:
+                self.sock.send(msgLength.to_bytes(4, byteorder='big'))
+                self.sock.send(bMessage)
+            except BrokenPipeError:
+                print("Broken pipe error")
+                return False
 
             return True
         except socket.timeout:
@@ -204,6 +233,8 @@ class GameIpcEnv(gym.Env):
                 # Socket timeout, continue the loop
                 print("readMessageReply failed:", e)
                 return None, None
+        else:
+            return None, None
 
     def readMessageReply(self):
         incomingMsgLen = self.readIpcIncomingMsgLenReply()
@@ -233,6 +264,8 @@ class GameIpcEnv(gym.Env):
                 # Socket timeout, continue the loop
                 print("readMessageReply failed:", e)
                 return None, None
+        else:
+            return None, None
 
     def get_observation(self):
         success = self.sendMessage(18, b"get observation")
@@ -247,8 +280,7 @@ class GameIpcEnv(gym.Env):
             return None
 
     def sendIpcAction(self, action):
-        bAction = action.tobytes()
-
+        bAction = numpy.int64(action).tobytes()
 
         self.sendMessage(20, bAction)
 
@@ -257,6 +289,8 @@ class GameIpcEnv(gym.Env):
             msgReplyObj = json.loads(msgReply)
             #print(f"Action reply: {msgReplyObj}")
             return msgReplyObj
+        else:
+            return None
 
 
     def setMaxMessageLength(self, maxLen):

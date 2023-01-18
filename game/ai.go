@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"image/jpeg"
 	"log"
+	"math"
 )
 
 type RLAction uint8
@@ -45,7 +46,6 @@ func (g *GameInstance) TakePlayer1Action(action_id RLAction) RLActionResult {
 	if action_id == RLActionNone {
 		g.player1Controller.deaccelerateVelocity()
 		g.player1Controller.deaccelerateHorizontalVelocity()
-		reward = 0.0
 	} else if action_id == RLActionMoveForward {
 		g.player1Controller.deaccelerateHorizontalVelocity()
 		g.player1Controller.accelerateForward()
@@ -71,13 +71,44 @@ func (g *GameInstance) TakePlayer1Action(action_id RLAction) RLActionResult {
 		log.Fatal("Unknown action type ", action_id)
 	}
 
+	// update and save the player's position to p.player.view.old_position every 1000 frames
+	if g.currentTick-g.episodeStartTick > 1000 {
+		if g.currentTick-g.lastPlayer1PositionUpdateTick > (15 * 1000) {
+			g.player1Controller.player.view.old_position = g.player1Controller.player.view.position
+			g.lastPlayer1PositionUpdateTick = g.currentTick
+
+			// set is_moving=True if the euclidian distance between old and new positions is greater than 1
+			distTravelled := math.Sqrt(math.Pow(g.player1Controller.player.view.old_position.X-g.player1Controller.player.view.position.X, 2) + math.Pow(g.player1Controller.player.view.old_position.Y-g.player1Controller.player.view.position.Y, 2))
+			if distTravelled < 1e-5 {
+				g.player1Controller.player.view.is_moving = false
+				//print("Player is not moving", distTravelled, "\r\n")
+			}
+		}
+	} else {
+		if g.lastPlayer1PositionUpdateTick == 0 {
+			g.lastPlayer1PositionUpdateTick = g.currentTick
+		}
+		distTravelled := math.Sqrt(math.Pow(g.player1Controller.player.view.old_position.X-g.player1Controller.player.view.position.X, 2) + math.Pow(g.player1Controller.player.view.old_position.Y-g.player1Controller.player.view.position.Y, 2))
+		if distTravelled > 1e-5 {
+			g.player1Controller.player.view.is_moving = true
+			//print("Player is moving", distTravelled, "\r\n")
+		}
+	}
+
 	reward = g.player1Controller.player.getReward()
+	//if action_id == RLActionTurnLeft || action_id == RLActionTurnRight {
+	//	reward = 0.01
+	//}
+
 	p1Obs := g.GetPlayer1Observation()
 	episodeLength := g.currentTick - g.episodeStartTick
 
-	print("Episode length: ", episodeLength)
+	isNotMoving := !g.player1Controller.player.view.is_moving
 
-	done := g.player1Controller.player.isDone()
+	//print("Episode length: ", episodeLength, "\r\n")
+	//print("isNotMoving: ", isNotMoving, "\r\n")
+
+	done := g.player1Controller.player.isDone() || episodeLength > maxEpisodeLength || isNotMoving
 
 	return RLActionResult{Reward: reward, Observation: p1Obs, Done: done, Info: ""}
 }

@@ -13,7 +13,7 @@ var (
 	fullscreen = false
 	width      = 320
 	height     = 240
-	scale      = 3.0
+	scale      = 1.0
 	port       = 0 // random
 )
 
@@ -55,9 +55,6 @@ func playerMessageLoop(sc *ipc.IpcServer) {
 		m, err := sc.Connection.Read()
 
 		if err == nil {
-			if m.MsgType > 0 {
-				log.Println("IpcConnection recieved: "+string(m.Data)+" - Message type: ", m.MsgType)
-			}
 
 			handleServerPlayerMessage(sc, m)
 
@@ -72,6 +69,9 @@ func playerMessageLoop(sc *ipc.IpcServer) {
 func handleServerPlayerMessage(sc *ipc.IpcServer, m *ipc.Message) {
 	if m.MsgType == 11 && string(m.Data) == "ping" {
 		sc.Connection.Write(12, []byte("pong"))
+	} else if m.MsgType == 13 && string(m.Data) == "reset" {
+		sc.Game.Reset()
+		sc.Connection.Write(14, []byte("reset ok"))
 	} else if m.MsgType == 16 && string(m.Data) == "begin control" {
 		sc.Connection.Write(17, []byte("control granted"))
 	} else if m.MsgType == 18 && string(m.Data) == "get observation" {

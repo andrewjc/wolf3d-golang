@@ -4,8 +4,6 @@ from stable_baselines3 import A2C
 
 def train():
 
-
-
     env = GameIpcEnv()
 
     model = PPO('CnnPolicy', env, verbose=1)
