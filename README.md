@@ -1,4 +1,4 @@
-# Wolfenstein 3D in GoLang
+# Navigating Raycasting Worlds using GoLang, Python and Reinforcement Learning
 
 Welcome to the Navigating Raycasting Worlds project! This project aims to provide a custom raycasting game engine written in GoLang, reminiscent of the classic Wolf3D game, and to explore the use of reinforcement learning techniques to train artificial agents to navigate through randomly generated maps.
 
