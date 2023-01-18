@@ -3,6 +3,14 @@ package game
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"github.com/golang/freetype/truetype"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/gofont/goregular"
+	"golang.org/x/image/math/fixed"
+	"image"
+	"image/color"
+	"image/draw"
 	"image/jpeg"
 	"log"
 	"math"
@@ -21,10 +29,11 @@ const (
 )
 
 type RLActionResult struct {
-	Reward      float64
-	Observation []uint8
-	Done        bool
-	Info        string
+	Reward          float32
+	Observation     []uint8
+	Observation_Pos []float32
+	Done            bool
+	Info            string
 }
 
 func (r *RLActionResult) ToJson() *string {
@@ -42,7 +51,7 @@ func (r *RLActionResult) ToJson() *string {
 const maxEpisodeLength = 60 * 1000
 
 func (g *GameInstance) TakePlayer1Action(action_id RLAction) RLActionResult {
-	var reward float64 = 0
+	var reward float32 = 0
 	if action_id == RLActionNone {
 		g.player1Controller.deaccelerateVelocity()
 		g.player1Controller.deaccelerateHorizontalVelocity()
@@ -96,31 +105,67 @@ func (g *GameInstance) TakePlayer1Action(action_id RLAction) RLActionResult {
 	}
 
 	reward = g.player1Controller.player.getReward()
-	//if action_id == RLActionTurnLeft || action_id == RLActionTurnRight {
-	//	reward = 0.01
-	//}
 
-	p1Obs := g.GetPlayer1Observation()
+	p1Obs, p10img := g.GetPlayer1Observation()
 	episodeLength := g.currentTick - g.episodeStartTick
 
 	isNotMoving := !g.player1Controller.player.view.is_moving
 
-	//print("Episode length: ", episodeLength, "\r\n")
-	//print("isNotMoving: ", isNotMoving, "\r\n")
-
 	done := g.player1Controller.player.isDone() || episodeLength > maxEpisodeLength || isNotMoving
 
-	return RLActionResult{Reward: reward, Observation: p1Obs, Done: done, Info: ""}
+	return RLActionResult{Reward: reward, Observation: p10img, Observation_Pos: p1Obs, Done: done, Info: ""}
 }
 
-func (g *GameInstance) GetPlayer1Observation() []byte {
+func (g *GameInstance) GetPlayer1Observation() ([]float32, []byte) {
+	values := g.player1Controller.player.getIntensityValuesAroundPlayer()
+
+	// Flatten the 2d array of values
+	flatValues := make([]float32, len(values)*len(values[0]))
+	for i := 0; i < len(values); i++ {
+		for j := 0; j < len(values[i]); j++ {
+			flatValues[i*len(values)+j] = float32((values[i][j]))
+
+			// Cap the value between 0 and 1
+			if flatValues[i*len(values)+j] > 1 {
+				flatValues[i*len(values)+j] = 1
+			}
+
+			if flatValues[i*len(values)+j] < 0 {
+				flatValues[i*len(values)+j] = 0
+			}
+		}
+	}
+
+	// Convert g.renderListener.renderBuffer into grayscale
+	img := image.NewGray(g.renderListener.renderBuffer.Bounds())
+	for i := 0; i < img.Rect.Dx(); i++ {
+		for j := 0; j < img.Rect.Dy(); j++ {
+			img.Set(i, j, color.Gray16Model.Convert(g.renderListener.renderBuffer.At(i, j)))
+		}
+	}
+
+	// Draw text onto the image in the top left with a black background
+	draw.Draw(img, img.Bounds(), image.NewUniform(color.Black), image.ZP, draw.Src)
+	draw.Draw(img, img.Bounds(), image.NewUniform(color.White), image.ZP, draw.Over)
+	f, err := truetype.Parse(goregular.TTF)
+	if err != nil {
+		log.Fatal(err)
+	}
+	d := &font.Drawer{
+		Dst:  img,
+		Src:  image.NewUniform(color.Black),
+		Face: truetype.NewFace(f, &truetype.Options{Size: 12}),
+		Dot:  fixed.P(0, 12),
+	}
+	d.DrawString(fmt.Sprintf("Player 1: %v", g.player1Controller.player.view.position))
+
 	// Compress the renderBuffer into JPEG
 	var buf bytes.Buffer
-	err := jpeg.Encode(&buf, g.renderListener.renderBuffer, &jpeg.Options{Quality: 30})
+	err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 30})
 	if err != nil {
 		log.Println("Error compressing observation: ", err)
-		return nil
+		return nil, nil
 	} else {
-		return buf.Bytes()
+		return flatValues, buf.Bytes()
 	}
 }

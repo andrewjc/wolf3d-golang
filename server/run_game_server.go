@@ -13,7 +13,7 @@ var (
 	fullscreen = false
 	width      = 320
 	height     = 240
-	scale      = 1.0
+	scale      = 3.0
 	port       = 0 // random
 )
 
@@ -75,7 +75,13 @@ func handleServerPlayerMessage(sc *ipc.IpcServer, m *ipc.Message) {
 	} else if m.MsgType == 16 && string(m.Data) == "begin control" {
 		sc.Connection.Write(17, []byte("control granted"))
 	} else if m.MsgType == 18 && string(m.Data) == "get observation" {
-		err := sc.Connection.Write(19, sc.Game.GetPlayer1Observation())
+
+		p1, p2 := sc.Game.GetPlayer1Observation()
+		result := game.RLActionResult{Reward: 0.0, Done: false, Info: "dummy", Observation: p2, Observation_Pos: p1}
+		resultJson := result.ToJson()
+
+		err := sc.Connection.Write(19, []byte(*resultJson))
+
 		if err != nil {
 			fmt.Println("Error writing observation: ", err)
 		}

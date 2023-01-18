@@ -6,6 +6,7 @@ package ipc
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"gameenv_ai/game"
 	"log"
@@ -163,7 +164,20 @@ func (sc *IpcConnection) read() {
 			break
 		}
 
-		if sc.encryption == true {
+		// json decode
+		if msgRecvd[0] == '{' {
+
+			var msg Message
+
+			err := json.Unmarshal(msgRecvd, &msg)
+			if err != nil {
+				sc.recieved <- &Message{err: err, MsgType: -2}
+				continue
+			}
+
+			sc.recieved <- &Message{Data: msg.Data, MsgType: msg.MsgType}
+
+		} else if sc.encryption == true {
 			msgFinal, err := decrypt(*sc.enc.cipher, msgRecvd)
 			if err != nil {
 				sc.recieved <- &Message{err: err, MsgType: -2}

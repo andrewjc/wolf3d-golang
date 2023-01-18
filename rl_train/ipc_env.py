@@ -21,8 +21,9 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         self.action_space = gym.spaces.Discrete(7)
         self.IMG_WIDTH = 64
         self.IMG_HEIGHT = 64
+        self.num_envs = 1
 
-        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(self.IMG_WIDTH, self.IMG_HEIGHT, 3), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.IMG_WIDTH, self.IMG_HEIGHT, 1), dtype=np.float32)
         self.connect()
 
     def reset(self):
@@ -32,7 +33,7 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         if msgType == 14:
             return self.get_observation()
 
-        return None
+        return None, None
 
 
     def _seed(self, seed=None):
@@ -56,7 +57,6 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
 
         if actionResult is None:
             return None, 0.0, True, {}
-
 
         obs = actionResult['Observation']
         # base64 decode
@@ -156,6 +156,7 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         while True:
             try:
                 # Receive data
+
                 data = self.sock.recv(4)
                 if not data:
                     # If data is not received, the connection is probably closed
@@ -192,7 +193,17 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         #print(f"Sending message: type={msgType}, data={msgData}")
 
         try:
-            bMessage = msgType.to_bytes(4, byteorder='big') + msgData
+            # encode msgType and msgData into json
+            b64Msgdata = base64.b64encode(msgData).decode('utf-8')
+            msg = json.dumps({"MsgType": msgType, "Data": b64Msgdata})
+            bMessage = msg
+
+            # utf8 encode the string
+            bMessage = bMessage.encode("utf-8")
+
+
+            #bMessage = msgType.to_bytes(4, byteorder='big') + msgData
+
             msgLength = len(bMessage)
 
             # send msgType as a series of bytes
@@ -201,6 +212,9 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
                 self.sock.send(bMessage)
             except BrokenPipeError:
                 print("Broken pipe error")
+                return False
+            except Exception as e:
+                print("Exception: " + str(e))
                 return False
 
             return True
@@ -272,7 +286,10 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         if success:
             msgType, msgData = self.readMessageReplyBytes()
             if msgType == 19:
-                img = self.imgFromStream(msgData)
+                msgReplyObj = json.loads(msgData)
+                # base64 decode
+                obs = base64.b64decode(msgReplyObj['Observation'])
+                img = self.imgFromStream(obs)
 
                 return img
 
@@ -298,15 +315,15 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
 
     def imgFromStream(self, msgData):
         # jpeg decompress msgData into numpy array
-        img = cv2.imdecode(np.frombuffer(msgData, np.uint8), cv2.IMREAD_COLOR)
+        img = cv2.imdecode(np.frombuffer(msgData, np.uint8), cv2.IMREAD_GRAYSCALE)
 
         # resize to 84x84
         img = cv2.resize(img, (self.IMG_WIDTH, self.IMG_HEIGHT))
 
         # normalize to 0-1
-        #img = img / 255.0
+        img = img / 255.0
 
-        img = img.reshape(self.IMG_WIDTH, self.IMG_HEIGHT, 3)
+        img = img.reshape(self.IMG_WIDTH, self.IMG_HEIGHT, 1)
         return img
 
 

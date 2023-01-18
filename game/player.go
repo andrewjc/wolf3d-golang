@@ -29,20 +29,41 @@ func (p *Player) getPlane() pixel.Vec {
 	return p.view.plane
 }
 
-func (p *Player) getReward() float64 {
+func (p *Player) getReward() float32 {
 	// Calculate euclidean distance between player 1 and player 2
 	p1Position := p.view.position
 	p2Position := p.game.player2Controller.player.view.position
 
 	eucDistance := math.Sqrt(math.Pow(p1Position.X-p2Position.X, 2) + math.Pow(p1Position.Y-p2Position.Y, 2))
 
-	// Calculate reward that is inversely proportional to the euclidian distance
-	reward := 1 / eucDistance
-	return reward
+	previousEucDistance := p.game.previousEucDistance
+
+	// If euclidean distance is less than 1, then the players are touching
+	if eucDistance < 1 {
+		return 1
+	}
+
+	eucDistanceDiff := previousEucDistance - eucDistance
+
+	if (previousEucDistance - eucDistance) == 0 {
+		p.game.previousEucDistance = eucDistance
+		return -0.1
+	}
+
+	eucDistanceDiff = (eucDistanceDiff - -1) / (1 - -1)
+	if eucDistance < previousEucDistance {
+		p.game.previousEucDistance = eucDistance
+		return float32(eucDistanceDiff)
+	} else {
+		p.game.previousEucDistance = eucDistance
+		return float32(eucDistanceDiff)
+	}
+
 }
 
 func (p *Player) getIntensityValuesAroundPlayer() [][]float64 {
-	intensity := getIntensityValues(p.game.mapData, p.getPosition())
+	enemy := p.game.player2Controller.player
+	intensity := getIntensityValues(p.game.mapData, enemy.getPosition())
 
 	// Filter intensity values to only include values in a 1 grid cell radius around player's position
 	filteredIntensity := [][]float64{}

@@ -2,8 +2,13 @@ package game
 
 import "C"
 import (
+	"fmt"
 	"github.com/faiface/pixel"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/basicfont"
+	"golang.org/x/image/math/fixed"
 	"image"
+	"image/color"
 	"math"
 )
 
@@ -47,6 +52,8 @@ func (c *RenderView) render() *image.RGBA {
 	c.renderWalls(m)
 
 	c.renderThings(m)
+
+	c.renderPosition(m)
 
 	if c.renderListener != nil {
 		c.renderListener.renderBuffer = m
@@ -353,4 +360,27 @@ func (r *RenderView) renderThings(m *image.RGBA) {
 			}
 		}
 	}
+}
+
+func addLabel(img *image.RGBA, x, y int, label string) {
+	col := color.RGBA{0, 0, 0, 255}
+
+	d := &font.Drawer{
+		Dst:  img,
+		Src:  image.NewUniform(col),
+		Face: basicfont.Face7x13,
+	}
+
+	d.Dot = fixed.Point26_6{
+		X: (fixed.I(img.Rect.Max.X) - d.MeasureString(label)) / 2,
+		Y: fixed.I(y),
+	}
+
+	d.DrawString(label)
+}
+
+func (c *RenderView) renderPosition(img *image.RGBA) {
+
+	addLabel(img, 10, 150, fmt.Sprintf("X: %f", c.parent.(*Player).getIntensityValuesAroundPlayer()[0]))
+
 }
