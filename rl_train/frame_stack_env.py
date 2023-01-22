@@ -27,7 +27,7 @@ class LazyFrames:
             DependencyNotInstalled: lz4 is not installed
         """
         self.frame_shape = tuple(frames[0].shape)
-        self.shape = (len(frames),) + self.frame_shape
+        self.shape = self.frame_shape+ (len(frames),)
         self.dtype = frames[0].dtype
 
         self._frames = frames
@@ -113,13 +113,8 @@ class FrameStack(gym.ObservationWrapper):
 
         self.frames = deque(maxlen=num_stack)
 
-        low = np.repeat(self.observation_space.low[np.newaxis, ...], num_stack, axis=0)
-        high = np.repeat(
-            self.observation_space.high[np.newaxis, ...], num_stack, axis=0
-        )
-        self.observation_space = Box(
-            low=low, high=high, dtype=self.observation_space.dtype
-        )
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(self.IMG_WIDTH, self.IMG_HEIGHT, num_stack), dtype=np.uint8)
+        print("FrameStack: ", self.observation_space.shape)
 
     def observation(self, observation):
         """Converts the wrappers current frames to lazy frames.
@@ -129,7 +124,9 @@ class FrameStack(gym.ObservationWrapper):
             :class:`LazyFrames` object for the wrapper's frame buffer,  :attr:`self.frames`
         """
         assert len(self.frames) == self.num_stack, (len(self.frames), self.num_stack)
-        return LazyFrames(list(self.frames), self.lz4_compress)
+        frm = LazyFrames(list(self.frames), self.lz4_compress)
+        frm = np.transpose(frm, (1, 2, 0))
+        return frm
 
     def step(self, action):
         """Steps through the environment, appending the observation to the frame buffer.

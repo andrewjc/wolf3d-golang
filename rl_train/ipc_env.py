@@ -19,11 +19,13 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         self.episodeNumber = 0
         self.is_connected = None
         self.action_space = gym.spaces.Discrete(7)
-        self.IMG_WIDTH = 64
-        self.IMG_HEIGHT = 64
+        self.IMG_WIDTH = 128
+        self.IMG_HEIGHT = 128
         self.num_envs = 1
 
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.IMG_WIDTH, self.IMG_HEIGHT, 1), dtype=np.float32)
+        self.observation_space = gym.spaces.Dict(
+            obs1 = gym.spaces.Box(low=0, high=255, shape=(1, self.IMG_WIDTH, self.IMG_HEIGHT), dtype=np.uint8),
+            obs2 = gym.spaces.Box(low=-100, high=100, shape=(9,), dtype=np.float32))
         self.connect()
 
     def reset(self):
@@ -58,11 +60,18 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         if actionResult is None:
             return None, 0.0, True, {}
 
-        obs = actionResult['Observation']
-        # base64 decode
-        obs = base64.b64decode(obs)
+        obs1 = actionResult['Observation']
+        obs2 = actionResult['Observation_Pos']
 
-        obs = self.imgFromStream(obs)
+        # base64 decode
+        obs1 = base64.b64decode(obs1)
+
+        obs1 = self.imgFromStream(obs1)
+
+        obs = dict()
+
+        obs['obs1'] = obs1
+        obs['obs2'] = obs2
 
         reward = actionResult['Reward']
         done = actionResult['Done']
@@ -72,6 +81,9 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         if done:
             info['episode']['r'] = reward
             self.episodeNumber += 1
+
+        print(f"step: action={action}, reward={reward}, done={done}")
+
 
         return obs, reward, done, {}
 
@@ -291,7 +303,15 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
                 obs = base64.b64decode(msgReplyObj['Observation'])
                 img = self.imgFromStream(obs)
 
-                return img
+                obs1 = img
+                obs2 = msgReplyObj['Observation_Pos']
+                obs = dict()
+
+                obs['obs1'] = obs1
+                obs['obs2'] = obs2
+
+
+                return obs
 
         else:
             return None
@@ -321,9 +341,10 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         img = cv2.resize(img, (self.IMG_WIDTH, self.IMG_HEIGHT))
 
         # normalize to 0-1
-        img = img / 255.0
+        #img = img / 255.0
 
-        img = img.reshape(self.IMG_WIDTH, self.IMG_HEIGHT, 1)
+        img = img.reshape(1, self.IMG_WIDTH, self.IMG_HEIGHT)
+
         return img
 
 

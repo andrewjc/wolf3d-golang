@@ -1,7 +1,6 @@
 package game
 
 import (
-	"fmt"
 	"github.com/faiface/pixel/pixelgl"
 	"math"
 )
@@ -16,37 +15,66 @@ const max_velocity = 0.1
 const min_velocity = -0.1
 
 func (p *PlayerController) processInput(win *pixelgl.Window, dt float64) {
+
+	action := -1
+	if win.Pressed(pixelgl.KeyUp) || win.Pressed(pixelgl.KeyW) {
+		action = 1
+	}
+	if win.Pressed(pixelgl.KeyDown) || win.Pressed(pixelgl.KeyS) {
+		action = 2
+	}
+
+	if win.Pressed(pixelgl.KeyA) {
+		action = 3
+	}
+
+	if win.Pressed(pixelgl.KeyD) {
+		action = 4
+	}
+
 	p.processForwardBackAcceleration(win)
 
 	p.processLeftRightAcceleration(win)
 
-	if win.Pressed(pixelgl.KeyRight) {
-		p.turnRight(1.2 * dt)
-	}
-
 	if win.Pressed(pixelgl.KeyLeft) {
 		p.turnLeft(1.2 * dt)
+		action = 5
 	}
 
-	mouseVector := win.MousePosition().Sub(win.MousePreviousPosition())
-	if mouseVector.X > 0 {
-		p.turnRight(mouseVector.X * 0.01)
-	} else {
-		p.turnLeft(mouseVector.X * -0.01)
+	if win.Pressed(pixelgl.KeyRight) {
+		p.turnRight(1.2 * dt)
+		action = 6
 	}
+
+	//mouseVector := win.MousePosition().Sub(win.MousePreviousPosition())
+	//if mouseVector.X > 0 {
+	//    p.turnRight(mouseVector.X * 0.01)
+	//} else {
+	//    p.turnLeft(mouseVector.X * -0.01)
+	// }
 
 	// Get observation and reward
 	reward := p.player.getReward()
 
-	p1Obs, _ := p.player.game.GetPlayer1Observation()
-	episodeLength := p.player.game.currentTick - p.player.game.episodeStartTick
+	if action > 0 {
+		//p1Obs, _ := p.player.game.GetPlayer1Observation()
+		episodeLength := p.player.game.currentTick - p.player.game.episodeStartTick
 
-	// Build a string of the observation
-	obsString := ""
-	for _, obs := range p1Obs {
-		obsString += fmt.Sprintf("%f,", obs)
+		//distToWall := p.player.game.distToNearestWall(p.player.view.position, 0.5)
+		//print("Distance to wall: ", distToWall, "\r\n")
+
+		//touchingWall := p.player.view.distanceToWall < 0.5
+
+		done := p.player.isDone() || episodeLength > maxEpisodeLength // || touchingWall
+
+		if done {
+			p.player.game.Reset()
+		}
+
+		if action > 0 {
+			p.player.game.recordPlayerSet(action, reward, done)
+		}
 	}
-	print("Reward: ", reward, " Episode Length: ", episodeLength, " Player 1 Observation: ", obsString, "\r\n")
 
 }
 

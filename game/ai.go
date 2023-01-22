@@ -3,14 +3,7 @@ package game
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"github.com/golang/freetype/truetype"
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/gofont/goregular"
-	"golang.org/x/image/math/fixed"
-	"image"
 	"image/color"
-	"image/draw"
 	"image/jpeg"
 	"log"
 	"math"
@@ -31,7 +24,7 @@ const (
 type RLActionResult struct {
 	Reward          float32
 	Observation     []uint8
-	Observation_Pos []float32
+	Observation_Pos []float64
 	Done            bool
 	Info            string
 }
@@ -48,7 +41,7 @@ func (r *RLActionResult) ToJson() *string {
 	}
 }
 
-const maxEpisodeLength = 60 * 1000
+const maxEpisodeLength = 5 * 60 * 1000
 
 func (g *GameInstance) TakePlayer1Action(action_id RLAction) RLActionResult {
 	var reward float32 = 0
@@ -107,23 +100,38 @@ func (g *GameInstance) TakePlayer1Action(action_id RLAction) RLActionResult {
 	reward = g.player1Controller.player.getReward()
 
 	p1Obs, p10img := g.GetPlayer1Observation()
+
 	episodeLength := g.currentTick - g.episodeStartTick
 
-	isNotMoving := !g.player1Controller.player.view.is_moving
+	//isNotMoving := !g.player1Controller.player.view.is_moving
 
-	done := g.player1Controller.player.isDone() || episodeLength > maxEpisodeLength || isNotMoving
+	touchingWall := g.player1Controller.player.view.distanceToWall < 0.5 //|| g.distToNearestWall(g.player1Controller.player.view.position, 0.5) < 1.5
+
+	done := g.player1Controller.player.isDone() || episodeLength > maxEpisodeLength || touchingWall
+
+	if g.player1Controller.player.isDone() {
+		print("Player is done", "\r\n")
+	}
+	if episodeLength > maxEpisodeLength {
+		print("Episode length exceeded", "\r\n")
+	}
+
+	if touchingWall {
+		print("Player is touching wall", "\r\n")
+		reward = -2
+	}
 
 	return RLActionResult{Reward: reward, Observation: p10img, Observation_Pos: p1Obs, Done: done, Info: ""}
 }
 
-func (g *GameInstance) GetPlayer1Observation() ([]float32, []byte) {
+func (g *GameInstance) GetPlayer1Observation() ([]float64, []byte) {
 	values := g.player1Controller.player.getIntensityValuesAroundPlayer()
 
 	// Flatten the 2d array of values
-	flatValues := make([]float32, len(values)*len(values[0]))
+	flatValues := make([]float64, len(values)*len(values[0]))
 	for i := 0; i < len(values); i++ {
 		for j := 0; j < len(values[i]); j++ {
-			flatValues[i*len(values)+j] = float32((values[i][j]))
+			flatValues[i*len(values)+j] = float64(values[i][j])
 
 			// Cap the value between 0 and 1
 			if flatValues[i*len(values)+j] > 1 {
@@ -137,35 +145,45 @@ func (g *GameInstance) GetPlayer1Observation() ([]float32, []byte) {
 	}
 
 	// Convert g.renderListener.renderBuffer into grayscale
-	img := image.NewGray(g.renderListener.renderBuffer.Bounds())
+	img := g.renderListener.renderBuffer
+	if img == nil {
+		return flatValues, nil
+	}
 	for i := 0; i < img.Rect.Dx(); i++ {
 		for j := 0; j < img.Rect.Dy(); j++ {
 			img.Set(i, j, color.Gray16Model.Convert(g.renderListener.renderBuffer.At(i, j)))
 		}
 	}
 
-	// Draw text onto the image in the top left with a black background
-	draw.Draw(img, img.Bounds(), image.NewUniform(color.Black), image.ZP, draw.Src)
-	draw.Draw(img, img.Bounds(), image.NewUniform(color.White), image.ZP, draw.Over)
-	f, err := truetype.Parse(goregular.TTF)
-	if err != nil {
-		log.Fatal(err)
-	}
-	d := &font.Drawer{
-		Dst:  img,
-		Src:  image.NewUniform(color.Black),
-		Face: truetype.NewFace(f, &truetype.Options{Size: 12}),
-		Dot:  fixed.P(0, 12),
-	}
-	d.DrawString(fmt.Sprintf("Player 1: %v", g.player1Controller.player.view.position))
-
 	// Compress the renderBuffer into JPEG
 	var buf bytes.Buffer
-	err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 30})
+	err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 30})
 	if err != nil {
 		log.Println("Error compressing observation: ", err)
 		return nil, nil
 	} else {
+
+		// Diff the p10bs observations with the previous ones
+		// and return the diff as the observation
+		var p1ObsDiff []float64
+		if g.lastPlayer1Obs != nil {
+			p1ObsDiff = make([]float64, len(flatValues))
+			for i := range flatValues {
+				// Calculate the percentage difference between the current and previous observation
+				p1ObsDiff[i] = (flatValues[i] - g.lastPlayer1Obs[i]) / g.lastPlayer1Obs[i]
+
+				if p1ObsDiff[0] > 0 {
+					p1ObsDiff[0] = 0
+				}
+			}
+		} else {
+			p1ObsDiff = flatValues
+		}
+		g.lastPlayer1Obs = flatValues
+
+		flatValues = p1ObsDiff
+
 		return flatValues, buf.Bytes()
+
 	}
 }

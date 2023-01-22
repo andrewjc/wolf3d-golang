@@ -1,11 +1,15 @@
 package game
 
 import (
+	"encoding/json"
 	"github.com/faiface/pixel"
 	"github.com/faiface/pixel/pixelgl"
 	"image"
 	"image/color"
+	"log"
+	"math"
 	"math/rand"
+	"os"
 	"time"
 )
 
@@ -38,9 +42,13 @@ type GameInstance struct {
 	currentTick      int64
 	episodeStartTick int64
 
+	timeBonusStartTick int64
+
 	previousEucDistance           float64
 	episodeCount                  int
 	lastPlayer1PositionUpdateTick int64
+	lastPlayer1Obs                []float64
+	planPath                      []pixel.Vec
 }
 
 func (g *GameInstance) GameLoop() {
@@ -68,7 +76,8 @@ func (g *GameInstance) GameLoop() {
 		g.updateGameEntities(dt)
 
 		// Process player input
-		//g.player1Controller.processInput(g.win, dt)
+		g.player1Controller.processInput(g.win, dt)
+		//g.autoPlan(g.player1Controller, g.player2Controller, dt)
 
 		// Render player1's view
 		g.player1Controller.player.view.render()
@@ -91,6 +100,7 @@ func (g *GameInstance) Reset() {
 
 	g.episodeStartTick = time.Now().UnixMilli()
 	g.previousEucDistance = 0
+	g.lastPlayer1Obs = nil
 
 	mapGen := Map{rows: 48, cols: 48}
 	mapGen.GenerateMap()
@@ -191,6 +201,71 @@ func (g *GameInstance) addGameObjects() {
 	g.gameObjects = append(g.gameObjects,
 		&player2,
 	)
+}
+
+func (g *GameInstance) distToNearestWall(position pixel.Vec, threshold float32) float64 {
+	mapData := g.mapData
+
+	// Get the position of the player in the map
+	mapX := int(position.X)
+	mapY := int(position.Y)
+
+	// Scan in concentric circles around the player, looking for a wall
+	// if no wall is found, expand the circle by 1 cell
+	for i := 0; i < 100; i++ {
+		for y := -i; y <= i; y++ {
+			for x := -i; x <= i; x++ {
+				if mapData[mapX+x][mapY+y] > 0 {
+
+					// Calculate the distance to the wall
+					dist := math.Sqrt(math.Pow(float64(x), 2) + math.Pow(float64(y), 2))
+
+					return dist
+				}
+			}
+		}
+	}
+
+	return 9999
+}
+
+type ObsRecordSet struct {
+	Obs1   []float64
+	Obs2   []byte
+	Reward float32
+	Done   bool
+	Action int
+}
+
+func (g *GameInstance) recordPlayerSet(action int, reward float32, done bool) {
+	textObservations, imgObservations := g.GetPlayer1Observation()
+
+	if textObservations[0] == 0 && textObservations[1] == 0 && textObservations[2] == 0 {
+		return
+	}
+
+	recordSet := ObsRecordSet{
+		Obs1:   textObservations,
+		Obs2:   imgObservations,
+		Reward: reward,
+		Done:   done,
+		Action: action,
+	}
+
+	// Implement the json serializer method
+	b, err := json.Marshal(recordSet)
+
+	// Open log file and write observation
+	f, err := os.OpenFile("train_data.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(string(b) + "\r\n"); err != nil {
+		log.Fatal(err)
+	}
+
 }
 
 func getRandomStartPosition(mapData *[][]int) pixel.Vec {

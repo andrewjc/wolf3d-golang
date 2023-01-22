@@ -30,10 +30,11 @@ type RenderView struct {
 	velocity           float32
 	horizontalVelocity float32
 
-	distanceToWall float64 // Calculated after a render cycle
-	zBuffer        [][]float64
-	old_position   pixel.Vec
-	is_moving      bool
+	distanceToWall             float64 // Calculated after a render cycle
+	zBuffer                    [][]float64
+	old_position               pixel.Vec
+	is_moving                  bool
+	isOtherPlayerSpriteVisible bool
 }
 
 type RenderListener struct {
@@ -354,6 +355,7 @@ func (r *RenderView) renderThings(m *image.RGBA) {
 					if c.R != 0 {
 						if r.zBuffer[xx][y] > objectPerpDist {
 							m.Set(xx, y, c)
+							r.isOtherPlayerSpriteVisible = true
 						}
 					}
 				}

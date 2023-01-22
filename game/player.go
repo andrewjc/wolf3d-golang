@@ -36,27 +36,31 @@ func (p *Player) getReward() float32 {
 
 	eucDistance := math.Sqrt(math.Pow(p1Position.X-p2Position.X, 2) + math.Pow(p1Position.Y-p2Position.Y, 2))
 
+	eucDistanceBonus := float32(100 - eucDistance)
+
 	previousEucDistance := p.game.previousEucDistance
 
 	// If euclidean distance is less than 1, then the players are touching
 	if eucDistance < 1 {
-		return 1
+		return 2
 	}
 
-	eucDistanceDiff := previousEucDistance - eucDistance
-
-	if (previousEucDistance - eucDistance) == 0 {
-		p.game.previousEucDistance = eucDistance
-		return -0.1
+	// Add a bonus if player2 is in player1's render field
+	bonus := float32(1)
+	if p.view.isOtherPlayerSpriteVisible {
+		bonus = 2
 	}
 
-	eucDistanceDiff = (eucDistanceDiff - -1) / (1 - -1)
+	gameTickBonus := (p.game.currentTick - p.game.timeBonusStartTick) / 1000
+
 	if eucDistance < previousEucDistance {
 		p.game.previousEucDistance = eucDistance
-		return float32(eucDistanceDiff)
+		return (float32(1 + gameTickBonus)) * bonus * eucDistanceBonus
 	} else {
 		p.game.previousEucDistance = eucDistance
-		return float32(eucDistanceDiff)
+		p.game.timeBonusStartTick = p.game.currentTick
+
+		return -1
 	}
 
 }
