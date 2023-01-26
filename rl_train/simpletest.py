@@ -1,6 +1,7 @@
 import base64
 import json
 
+import PIL
 import numpy as np
 import torch
 import torch.nn.functional as ff
@@ -12,7 +13,7 @@ import joblib
 from torch.utils.data import Dataset, DataLoader
 
 
-
+useAccelerator = True
 IMG_WIDTH = 128
 IMG_HEIGHT = 128
 
@@ -49,11 +50,30 @@ def imgFromStream(msgData):
 
     return img
 
+from torchvision import transforms
+
+# build image transforms to apply to images during training
+img_transforms = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.RandomAffine(degrees=20),
+    transforms.RandomAffine(0, translate=(0.2, 0.2)),
+    transforms.RandomAffine(0, shear=20),
+    transforms.RandomAffine(0, scale=(0.8, 1.2)),
+    transforms.RandomRotation(20),
+    transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
+    #transforms.ToTensor(),
+    transforms.ToTensor(),
+    #transforms.Normalize((0.5,), (0.5,))
+])
+
 
 def asimg(src):
     obs1 = base64.b64decode(src)
 
     obs1 = imgFromStream(obs1)
+    #obs1 = img_transforms(obs1)
+
+    #obs1.save('test.png')
     return obs1
 
 class ObservationDataset(Dataset):
@@ -76,59 +96,64 @@ class ObservationDataset(Dataset):
         return textobs, imgobs, labels
 
 # Create data loaders
-batch_size = 32
 num_outputs = 7
 common_heads = 32
-
 model1 = torch.nn.Sequential(
-    torch.nn.Linear(9, 32),
+    torch.nn.Linear(9, 16),
+    torch.nn.BatchNorm1d(16),
     torch.nn.ReLU(),
+    #torch.nn.Dropout(0.25),
+
+    torch.nn.Linear(16, 32),
     torch.nn.BatchNorm1d(32),
-    torch.nn.Dropout(0.5),
+    torch.nn.ReLU(),
+    #torch.nn.Dropout(0.25),
 
-    #torch.nn.Linear(32, 64),
-    #torch.nn.ReLU(),
-    #torch.nn.BatchNorm1d(64),
-    #torch.nn.Dropout(0.5),
-
-    #torch.nn.Linear(64, 32),
-    #torch.nn.ReLU(),
-    #torch.nn.BatchNorm1d(32),
-    #torch.nn.Dropout(0.5),
+    torch.nn.Linear(32, 32),
+    torch.nn.BatchNorm1d(32),
+    torch.nn.ReLU(),
+    #torch.nn.Dropout(0.25),
 
     torch.nn.Linear(32, common_heads),
     #torch.nn.LayerNorm(common_heads),
 )
 
 
+
 class ImageObservationHead(nn.Module):
     def __init__(self):
         super(ImageObservationHead, self).__init__()
         # 1st convolutional block
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=64, kernel_size=5, stride=1, padding=1)
-        self.batch_norm1 = nn.BatchNorm2d(num_features=64)
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=5, stride=1, padding=1)
+        self.batch_norm1 = nn.BatchNorm2d(num_features=32)
         self.relu1 = nn.ReLU()
         self.pool1 = nn.MaxPool2d(kernel_size=3, stride=2)
         self.drop1 = nn.Dropout(0.25)
+        self.ln1 = nn.Linear(64, 64)
 
         # 2nd convolutional block
-        self.conv2 = nn.Conv2d(in_channels=64, out_channels=32, kernel_size=3, stride=1, padding=1)
-        self.batch_norm2 = nn.BatchNorm2d(num_features=32)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)
+        self.batch_norm2 = nn.BatchNorm2d(num_features=64)
         self.relu2 = nn.ReLU()
         self.pool2 = nn.MaxPool2d(kernel_size=3, stride=2)
         self.drop2 = nn.Dropout(0.25)
+        self.ln2 = nn.Linear(64, 64)
 
         # 3rd convolutional block
-        self.conv3 = nn.Conv2d(in_channels=32, out_channels=16, kernel_size=3, stride=1, padding=1)
-        self.batch_norm3 = nn.BatchNorm2d(num_features=16)
+        self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1)
+        self.batch_norm3 = nn.BatchNorm2d(num_features=64)
         self.relu3 = nn.ReLU()
         self.pool3 = nn.MaxPool2d(kernel_size=3, stride=2)
         self.drop3 = nn.Dropout(0.25)
+        self.ln3 = nn.Linear(64, 64)
+
 
         # Fully connected layer
-        self.fc = nn.Linear(576, 128)
-        self.fc2 = nn.Linear(128, common_heads)
-        self.fcbn1 = nn.BatchNorm1d(num_features=128)
+        self.fc = nn.Linear(10816, common_heads)
+        self.fc2 = nn.Linear(256, common_heads)
+        self.fcbn1 = nn.BatchNorm1d(num_features=256)
+        self.fcbn2 = nn.BatchNorm1d(num_features=32)
+
         self.drop4 = nn.Dropout(0.25)
         self.relu4 = nn.ReLU()
 
@@ -138,29 +163,34 @@ class ImageObservationHead(nn.Module):
 
     def forward(self, x):
         x = self.conv1(x)
+        #x = self.batch_norm1(x)
+        #x = self.relu1(x)
         x = self.pool1(x)
-        x = self.batch_norm1(x)
-        x = self.relu1(x)
+        #x = self.drop1(x)
 
         x = self.conv2(x)
+        #x = self.batch_norm2(x)
+        #x = self.relu2(x)
         x = self.pool2(x)
-        x = self.batch_norm2(x)
-        x = self.relu2(x)
 
         x = self.conv3(x)
+        #x = self.batch_norm3(x)
+        #x = self.relu3(x)
         x = self.pool3(x)
-        x = self.batch_norm3(x)
-        x = self.relu3(x)
 
-        x = self.avgPool(x)
+        #x = self.avgPool(x)
 
         x = torch.flatten(x, 1)
 
         x = self.fc(x)
-        x = self.fcbn1(x)
+        #x = self.fcbn1(x)
         x = self.relu4(x)
         #x = self.drop4(x)
-        x = self.fc2(x)
+        #x = self.fc2(x)
+       # x = self.fcbn2(x)
+        #x = self.relu4(x)
+
+        #x = self.ln(x)
         return x
 
 
@@ -173,8 +203,9 @@ class CustomModel(torch.nn.Module):
         self.fc = torch.nn.Linear(common_heads * 2, 64)
         self.fc2 = torch.nn.Linear(64, num_outputs)
         self.bn = torch.nn.BatchNorm1d(common_heads*2)
+        self.bn2 = torch.nn.BatchNorm1d(num_outputs)
         self.relu = torch.nn.ReLU()
-        self.drop = torch.nn.Dropout(0.5)
+        self.drop = torch.nn.Dropout(0.25)
 
         self.softmax = torch.nn.Softmax(dim=1)
 
@@ -184,11 +215,13 @@ class CustomModel(torch.nn.Module):
         x = torch.cat([x1, x2], dim=1)
 
         x = self.fc(x)
-        x = self.bn(x)
+        #x = self.bn(x)
         x = self.relu(x)
         #x = self.drop(x)
 
-        #x = self.fc2(x)
+        x = self.fc2(x)
+        #x = self.bn2(x)
+        x = self.relu(x)
 
         x = self.softmax(x)
         return x
@@ -196,7 +229,7 @@ class CustomModel(torch.nn.Module):
 
 # create model
 device = torch.device("cpu")
-if True and torch.backends.mps.is_available():
+if useAccelerator and torch.backends.mps.is_available():
     print("Using MPS")
     device = torch.device("mps")
 
@@ -204,8 +237,9 @@ model1.to(device)
 model = CustomModel()
 model.to(device)
 
+batch_size = 256
 weight_decay = 1e-4
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay= weight_decay)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 loss_fn = torch.nn.CrossEntropyLoss().to(device)
 
 data_loader = DataLoader(load_text_file("train_data.txt", device), batch_size=batch_size, shuffle=True)
@@ -235,18 +269,19 @@ def train_batch(dl, model, loss_fn, optimizer, stats):
     return stats
 
 def test_batch(dl, model, loss_fn, stats):
-    for textobs, imgobs, labels in dl:
-        outputs = model(textobs, imgobs)
-        _, preds = torch.max(outputs, 1)
-        # Compute the loss
-        loss = loss_fn(outputs, labels)
-        # Backward pass
-        loss.backward()
+    with torch.no_grad():
+        model.eval()
+        for textobs, imgobs, labels in dl:
+            outputs = model(textobs, imgobs)
+            _, preds = torch.max(outputs, 1)
+            # Compute the loss
+            loss = loss_fn(outputs, labels)
 
-        # Compute the running loss and accuracy
-        stats['test_running_loss'] += loss.item() * imgobs.size(0)
-        stats['test_running_acc'] += torch.sum(preds == labels.data)
-        stats['test_total'] += labels.size(0)
+            # Compute the running loss and accuracy
+            stats['test_running_loss'] += loss.item() * imgobs.size(0)
+            stats['test_running_acc'] += torch.sum(preds == labels.data)
+            stats['test_total'] += labels.size(0)
+    model.train()
     return stats
 
 

@@ -77,15 +77,21 @@ func (g *GameInstance) GameLoop() {
 
 		// Process player input
 		g.player1Controller.processInput(g.win, dt)
+
 		//g.autoPlan(g.player1Controller, g.player2Controller, dt)
 
 		// Render player1's view
-		g.player1Controller.player.view.render()
+		//g.player1Controller.player.view.render()
 
-		p := pixel.PictureDataFromImage(g.renderListener.renderBuffer)
-
-		pixel.NewSprite(p, p.Bounds()).
-			Draw(g.win, pixel.IM.Moved(g.center).Scaled(g.center, g.RenderScale))
+		if g.renderListener.renderBuffer != nil {
+			g.renderListener.renderBufferMutex.Lock()
+			p := pixel.PictureDataFromImage(g.renderListener.renderBuffer)
+			pixel.NewSprite(p, p.Bounds()).
+				Draw(g.win, pixel.IM.Moved(g.center).Scaled(g.center, g.RenderScale))
+			g.renderListener.renderBufferMutex.Unlock()
+		} else {
+			g.player1Controller.player.view.render()
+		}
 
 		g.win.Update()
 	}
@@ -109,6 +115,8 @@ func (g *GameInstance) Reset() {
 
 	g.player1Controller.player.view.position = getRandomStartPosition(&g.mapData)
 	g.player2Controller.player.view.position = getRandomStartPosition(&g.mapData)
+
+	g.player1Controller.distanceStack = []float64{}
 }
 
 func (g *GameInstance) gameInit() {
@@ -195,8 +203,7 @@ func (g *GameInstance) addGameObjects() {
 
 	player2Camera.parent = &player2
 
-	g.player1Controller.player.view.is_moving = true
-	g.player2Controller.player.view.is_moving = true
+	g.player1Controller.player.is_moving = true
 
 	g.gameObjects = append(g.gameObjects,
 		&player2,

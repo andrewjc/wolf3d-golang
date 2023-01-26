@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 import time
 
@@ -24,7 +25,7 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         self.num_envs = 1
 
         self.observation_space = gym.spaces.Dict(
-            obs1 = gym.spaces.Box(low=0, high=255, shape=(1, self.IMG_WIDTH, self.IMG_HEIGHT), dtype=np.uint8),
+            obs1 = gym.spaces.Box(low=0, high=1, shape=(3, self.IMG_WIDTH, self.IMG_HEIGHT), dtype=np.uint8),
             obs2 = gym.spaces.Box(low=-100, high=100, shape=(9,), dtype=np.float32))
         self.connect()
 
@@ -72,6 +73,8 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
 
         obs['obs1'] = obs1
         obs['obs2'] = obs2
+
+        print(obs2)
 
         reward = actionResult['Reward']
         done = actionResult['Done']
@@ -335,15 +338,26 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
 
     def imgFromStream(self, msgData):
         # jpeg decompress msgData into numpy array
-        img = cv2.imdecode(np.frombuffer(msgData, np.uint8), cv2.IMREAD_GRAYSCALE)
+        # img = cv2.imdecode(np.frombuffer(msgData, np.uint8), cv2.IMREAD_COLOR)
+
+        # Convert bytes to stream (file-like object in memory)
+        picture_stream = io.BytesIO(msgData)
+
+        # Create Image object
+        from PIL import Image
+        img = Image.open(picture_stream)
 
         # resize to 84x84
-        img = cv2.resize(img, (self.IMG_WIDTH, self.IMG_HEIGHT))
+        img = img.resize((self.IMG_WIDTH, self.IMG_HEIGHT))
+
+        #img.save(f"frames/frame_{time.time_ns()}.png")
+
+        pix = numpy.array(img)
 
         # normalize to 0-1
-        #img = img / 255.0
+        img = pix / 255.0
 
-        img = img.reshape(1, self.IMG_WIDTH, self.IMG_HEIGHT)
+        img = img.reshape(3, self.IMG_WIDTH, self.IMG_HEIGHT)
 
         return img
 

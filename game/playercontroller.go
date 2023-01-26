@@ -6,7 +6,8 @@ import (
 )
 
 type PlayerController struct {
-	player *Player
+	player        *Player
+	distanceStack []float64
 }
 
 const forward_acceleration = 0.003
@@ -54,9 +55,9 @@ func (p *PlayerController) processInput(win *pixelgl.Window, dt float64) {
 	// }
 
 	// Get observation and reward
-	reward := p.player.getReward()
 
 	if action > 0 {
+		reward := p.player.getReward()
 		//p1Obs, _ := p.player.game.GetPlayer1Observation()
 		episodeLength := p.player.game.currentTick - p.player.game.episodeStartTick
 
@@ -74,8 +75,33 @@ func (p *PlayerController) processInput(win *pixelgl.Window, dt float64) {
 		if action > 0 {
 			p.player.game.recordPlayerSet(action, reward, done)
 		}
-	}
 
+		// update and save the player's position to p.player.view.old_position every 1000 frames
+		if p.player.game.currentTick-p.player.game.episodeStartTick > 100 {
+			if p.player.game.currentTick-p.player.game.lastPlayer1PositionUpdateTick > (1 * 1000) {
+
+				// set is_moving=True if the euclidian distance between old and new positions is greater than 1
+				distTravelled := math.Sqrt(math.Pow(p.player.game.player1Controller.player.old_position.X-p.player.game.player1Controller.player.view.position.X, 2) + math.Pow(p.player.game.player1Controller.player.old_position.Y-p.player.game.player1Controller.player.view.position.Y, 2))
+				if distTravelled < 1e-5 {
+					p.player.game.player1Controller.player.is_moving = false
+				} else {
+					p.player.game.player1Controller.player.is_moving = true
+				}
+				p.player.game.player1Controller.player.old_position = p.player.game.player1Controller.player.view.position
+				p.player.game.lastPlayer1PositionUpdateTick = p.player.game.currentTick
+			}
+		} else {
+			distTravelled := math.Sqrt(math.Pow(p.player.game.player1Controller.player.old_position.X-p.player.game.player1Controller.player.view.position.X, 2) + math.Pow(p.player.game.player1Controller.player.old_position.Y-p.player.game.player1Controller.player.view.position.Y, 2))
+			if distTravelled < 1e-5 {
+				p.player.game.player1Controller.player.is_moving = false
+			} else {
+				p.player.game.player1Controller.player.is_moving = true
+			}
+			if p.player.game.lastPlayer1PositionUpdateTick == 0 {
+				p.player.game.lastPlayer1PositionUpdateTick = p.player.game.currentTick
+			}
+		}
+	}
 }
 
 func (p *PlayerController) processForwardBackAcceleration(win *pixelgl.Window) {

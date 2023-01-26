@@ -10,6 +10,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"sync"
 )
 
 const texSize = 64
@@ -32,13 +33,12 @@ type RenderView struct {
 
 	distanceToWall             float64 // Calculated after a render cycle
 	zBuffer                    [][]float64
-	old_position               pixel.Vec
-	is_moving                  bool
 	isOtherPlayerSpriteVisible bool
 }
 
 type RenderListener struct {
-	renderBuffer *image.RGBA
+	renderBuffer      *image.RGBA
+	renderBufferMutex sync.Mutex
 }
 
 func (c *RenderView) render() *image.RGBA {
@@ -57,7 +57,9 @@ func (c *RenderView) render() *image.RGBA {
 	c.renderPosition(m)
 
 	if c.renderListener != nil {
+		c.renderListener.renderBufferMutex.Lock()
 		c.renderListener.renderBuffer = m
+		c.renderListener.renderBufferMutex.Unlock()
 	}
 	return m
 }
@@ -163,6 +165,9 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 		}
 
 		texNum := c.parent.(*Player).game.getTexNum(worldX, worldY)
+		if texNum == 4 {
+			texNum = 2
+		}
 
 		for y := drawStart; y < drawEnd+1; y++ {
 			texY := (float64(y) - float64(c.renderHeight)/2 + float64(lineHeight)/2) * texSize / float64(lineHeight)
@@ -248,7 +253,7 @@ func (c *RenderView) renderWalls(m *image.RGBA) {
 
 				// scale the color by the percentage
 
-				col := c.parent.(*Player).game.textureMap.RGBAAt(fx, fy)
+				col := c.parent.(*Player).game.textureMap.RGBAAt(fx+(0*texSize), fy)
 				col.R = uint8(float64(col.R) * percentage)
 				col.G = uint8(float64(col.G) * percentage)
 				col.B = uint8(float64(col.B) * percentage)
@@ -310,6 +315,7 @@ func roundDownToClosest(f float64) float64 {
 }
 
 func (r *RenderView) renderThings(m *image.RGBA) {
+	r.isOtherPlayerSpriteVisible = false
 	for _, t := range r.parent.(*Player).game.gameObjects {
 
 		x := t.getPosition().X - r.position.X
