@@ -16,6 +16,7 @@ from gym import utils
 class GameIpcEnv(gym.Env, utils.EzPickle):
     def __init__(self):
         utils.EzPickle.__init__(self)
+        self.valueBuffer = []
         self._seed(seed=time.time_ns())
         self.episodeNumber = 0
         self.is_connected = None
@@ -23,14 +24,20 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         self.IMG_WIDTH = 128
         self.IMG_HEIGHT = 128
         self.num_envs = 1
+        self.pos_min = 9999999
+        self.pos_max = -10000
+        self.pos_mean = 0
+        self.pos_std = 0
 
         self.observation_space = gym.spaces.Dict(
-            obs1 = gym.spaces.Box(low=0, high=1, shape=(3, self.IMG_WIDTH, self.IMG_HEIGHT), dtype=np.uint8),
-            obs2 = gym.spaces.Box(low=-100, high=100, shape=(9,), dtype=np.float32))
+            obs1 = gym.spaces.Box(low=0, high=1, shape=(3, self.IMG_WIDTH, self.IMG_HEIGHT), dtype=np.float32),
+            obs2 = gym.spaces.Box(low=0, high=1, shape=(9,), dtype=np.float32))
         self.connect()
 
     def reset(self):
-        print("reset")
+        #print("reset")
+        print(f"Cur min/max/mean/std: {self.pos_min} / {self.pos_max} / {self.pos_mean} / {self.pos_std}")
+
         self.sendMessage(13, b"reset")
         msgType, msgData = self.readMessageReply()
         if msgType == 14:
@@ -74,7 +81,7 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
         obs['obs1'] = obs1
         obs['obs2'] = obs2
 
-        print(obs2)
+        #print(obs2)
 
         reward = actionResult['Reward']
         done = actionResult['Done']
@@ -85,7 +92,7 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
             info['episode']['r'] = reward
             self.episodeNumber += 1
 
-        print(f"step: action={action}, reward={reward}, done={done}")
+        #print(f"step: action={action}, reward={reward}, done={done}")
 
 
         return obs, reward, done, {}
@@ -308,10 +315,54 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
 
                 obs1 = img
                 obs2 = msgReplyObj['Observation_Pos']
+
+                # return the minimum value in the obs2 list of float32 values
+                # iterate through obs2 and find the smallest value
+
+
+                for x in range(len(obs2)):
+                    val = obs2[x]
+                    val = val - 0.013 #subtract mean
+                    val = val / 0.057 #divide stddev
+
+                    # normalise val between 0 and 1
+                    # min val = -0.5
+                    # max val = 20
+                    val = (val - 0.0004) / (1.0 - 0.0004)
+
+                    if val < 0:
+                        val = 0
+
+                    if val > 1:
+                        val = 1
+
+                    obs2[x] = val
+
+                    #self.valueBuffer = self.valueBuffer + [obs2[x]]
+
+                    #if np.min(self.valueBuffer) != self.pos_min:
+                    #    self.pos_min = np.min(self.valueBuffer)
+
+                    #if np.max(self.valueBuffer) != self.pos_max:
+                    #    self.pos_max = np.max(self.valueBuffer)
+
+                    #if np.mean(self.valueBuffer) != self.pos_mean:
+                    #    self.pos_mean = np.mean(self.valueBuffer)
+
+                    #if np.std(self.valueBuffer) != self.pos_std:
+                    #    self.pos_std = np.std(self.valueBuffer)
+
                 obs = dict()
+
+                obs2 = np.array(obs2)
+
+                obs2[obs2 == np.inf] = 0
+                obs2[obs2 == -np.inf] = 0
+                obs2[obs2 == np.nan] = 0
 
                 obs['obs1'] = obs1
                 obs['obs2'] = obs2
+
 
 
                 return obs
@@ -352,7 +403,7 @@ class GameIpcEnv(gym.Env, utils.EzPickle):
 
         #img.save(f"frames/frame_{time.time_ns()}.png")
 
-        pix = numpy.array(img)
+        pix = numpy.array(img).astype(numpy.float32)
 
         # normalize to 0-1
         img = pix / 255.0

@@ -1,4 +1,6 @@
 import gym.vector
+import torch
+from torch._C._te import Tensor
 
 from ipc_env import GameIpcEnv
 from stable_baselines3 import PPO
@@ -15,6 +17,12 @@ from gym import spaces
 
 from sb3_contrib import RecurrentPPO
 
+# create model
+device = torch.device("cpu")
+useAccelerator = True
+if useAccelerator and torch.backends.mps.is_available():
+    print("Using MPS")
+    device = torch.device("mps")
 
 class ImageFeatureExtractor(BaseFeaturesExtractor):
 
@@ -27,17 +35,16 @@ class ImageFeatureExtractor(BaseFeaturesExtractor):
 
         n_input_channels = observation_space.shape[0]
         self.cnn = nn.Sequential(
-            nn.Conv2d(n_input_channels, 32, kernel_size=5, stride=2, padding=0),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=3, stride=2),
+            # nn.BatchNorm2d(n_input_channels),
+            nn.Conv2d(n_input_channels, 32, kernel_size=8, stride=4, padding=0),
+            # nn.BatchNorm2d(32),
+            nn.ELU(),
+            # nn.MaxPool2d(kernel_size=3, stride=1),
 
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=0),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=3, stride=2),
-
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=0),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=3, stride=2),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
+            # nn.BatchNorm2d(64),
+            nn.ELU(),
+            # nn.MaxPool2d(kernel_size=3, stride=1),
 
             nn.Flatten(),
         )
@@ -46,14 +53,14 @@ class ImageFeatureExtractor(BaseFeaturesExtractor):
         with th.no_grad():
             n_flatten = self.cnn(th.as_tensor(observation_space.sample()[None]).float()).shape[1]
 
-        self.linear = nn.Sequential(nn.Linear(n_flatten, features_dim), nn.ReLU())
+        self.linear = nn.Sequential(nn.Linear(n_flatten, features_dim), nn.ELU())
 
     def forward(self, observations: th.Tensor) -> th.Tensor:
         return self.linear(self.cnn(observations))
 
 
 class CombinedExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Dict, cnn_output_dim: int = 32):
+    def __init__(self, observation_space: gym.spaces.Dict, cnn_output_dim: int = 256):
         super().__init__(observation_space, features_dim=1)
 
         self.prev_state = None
@@ -61,7 +68,7 @@ class CombinedExtractor(BaseFeaturesExtractor):
 
         total_concat_size = 0
         for key, subspace in observation_space.spaces.items():
-            if is_image_space(subspace):
+            if is_image_space(subspace) or len(subspace.shape) == 3:
                 n_input_channels = subspace.shape[0]
                 network = ImageFeatureExtractor(subspace, features_dim=cnn_output_dim)
 
@@ -69,12 +76,11 @@ class CombinedExtractor(BaseFeaturesExtractor):
                 total_concat_size += cnn_output_dim
             else:
                 # The observation key is a vector, flatten it if needed
-                text_output_dims = 32
+                text_output_dims = 16
                 extractors[key] = nn.Sequential(
-                    nn.Flatten(),
-                    nn.Linear(get_flattened_obs_dim(subspace), 256),
+                    nn.Linear(get_flattened_obs_dim(subspace), 32),
                     nn.ReLU(),
-                    nn.Linear(256, text_output_dims),
+                    nn.Linear(32, text_output_dims),
                 )
                 total_concat_size += text_output_dims
 
@@ -85,7 +91,6 @@ class CombinedExtractor(BaseFeaturesExtractor):
 
         self.bn = nn.BatchNorm1d(total_concat_size)
 
-
     def forward(self, observations: TensorDict) -> th.Tensor:
         encoded_tensor_list = []
 
@@ -95,18 +100,16 @@ class CombinedExtractor(BaseFeaturesExtractor):
 
         catobs = self.bn(catobs)
 
-
         return catobs
 
 
 def train():
-
     env = GameIpcEnv()
 
-    #env = FrameStack(env, 3)
+    # env = FrameStack(env, 3)
 
     checkpoint_callback = CheckpointCallback(
-        save_freq=100000,
+        save_freq=1,
         save_path="./logs/",
         name_prefix="rl_model",
         save_replay_buffer=False,
@@ -115,10 +118,20 @@ def train():
     policy_kwargs = dict(
         features_extractor_class=CombinedExtractor,
         features_extractor_kwargs=dict(),
+        # net_arch=[dict(pi=[256], vf=[256])],
+        activation_fn=nn.ReLU,
+        normalize_images=False,
+        # shared_lstm=False,
+        # enable_critic_lstm=False,
+        # n_lstm_layers=4,
+        # lstm_hidden_size=64,
     )
-    model = RecurrentPPO("MultiInputLstmPolicy", learning_rate=0.0001, policy_kwargs=policy_kwargs, env=env, verbose=1, tensorboard_log="./logs/")
+    model = A2C("MultiInputPolicy",
+                 policy_kwargs=policy_kwargs, env=env, verbose=1, tensorboard_log="./logs/")
 
-    model.learn(total_timesteps=50000000, callback=checkpoint_callback)
+    # model.load("logs/rl_model_400000_steps.zip")
+
+    model.learn(total_timesteps=50000000) #, callback=checkpoint_callback)
 
     vec_env = model.get_env()
     obs = vec_env.reset()
