@@ -40,7 +40,7 @@ func (r *RLActionResult) ToJson() *string {
 	}
 }
 
-const maxEpisodeLength = 5 * 60 * 1000
+const maxEpisodeLength = 15 * 60 * 1000
 
 func (g *GameInstance) TakePlayer1Action(action_id RLAction) RLActionResult {
 	var reward float32 = 0
@@ -81,7 +81,7 @@ func (g *GameInstance) TakePlayer1Action(action_id RLAction) RLActionResult {
 	if g.player1Controller.player.game.currentTick-g.player1Controller.player.game.episodeStartTick > 100 {
 		if g.player1Controller.player.game.currentTick-g.player1Controller.player.game.lastPlayer1PositionUpdateTick > (3 * 1000) {
 
-			print("distTravelled: ", distTravelled, "\r\n")
+			//print("distTravelled: ", distTravelled, "\r\n")
 
 			// set is_moving=True if the euclidian distance between old and new positions is greater than 1
 			if distTravelled < 1 {
