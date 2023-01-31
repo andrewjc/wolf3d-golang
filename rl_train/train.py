@@ -34,16 +34,29 @@ class ImageFeatureExtractor(BaseFeaturesExtractor):
         super().__init__(observation_space, features_dim)
 
         n_input_channels = observation_space.shape[0]
+
         self.cnn = nn.Sequential(
-            # nn.BatchNorm2d(n_input_channels),
             nn.Conv2d(n_input_channels, 32, kernel_size=8, stride=4, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+
+        #self.natureCnn = NatureCNN(observation_space, features_dim)
+
+        self.cnn2 = nn.Sequential(
+            # nn.BatchNorm2d(n_input_channels),
+            nn.Conv2d(n_input_channels, 32, kernel_size=5, stride=3, padding=0),
             # nn.BatchNorm2d(32),
-            nn.ELU(),
+            nn.ReLU(),
             # nn.MaxPool2d(kernel_size=3, stride=1),
 
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=0),
             # nn.BatchNorm2d(64),
-            nn.ELU(),
+            nn.ReLU(),
             # nn.MaxPool2d(kernel_size=3, stride=1),
 
             nn.Flatten(),
@@ -53,7 +66,7 @@ class ImageFeatureExtractor(BaseFeaturesExtractor):
         with th.no_grad():
             n_flatten = self.cnn(th.as_tensor(observation_space.sample()[None]).float()).shape[1]
 
-        self.linear = nn.Sequential(nn.Linear(n_flatten, features_dim), nn.ELU())
+        self.linear = nn.Sequential(nn.Linear(n_flatten, features_dim), nn.ReLU())
 
     def forward(self, observations: th.Tensor) -> th.Tensor:
         return self.linear(self.cnn(observations))
@@ -76,11 +89,13 @@ class CombinedExtractor(BaseFeaturesExtractor):
                 total_concat_size += cnn_output_dim
             else:
                 # The observation key is a vector, flatten it if needed
-                text_output_dims = 16
+                text_output_dims = 32
                 extractors[key] = nn.Sequential(
                     nn.Linear(get_flattened_obs_dim(subspace), 32),
                     nn.ReLU(),
-                    nn.Linear(32, text_output_dims),
+                    nn.Linear(32, 64),
+                    nn.ReLU(),
+                    nn.Linear(64, text_output_dims),
                 )
                 total_concat_size += text_output_dims
 
@@ -98,7 +113,7 @@ class CombinedExtractor(BaseFeaturesExtractor):
             encoded_tensor_list.append(extractor(observations[key]))
         catobs = th.cat(encoded_tensor_list, dim=1)
 
-        catobs = self.bn(catobs)
+        #catobs = self.bn(catobs)
 
         return catobs
 
@@ -118,8 +133,8 @@ def train():
     policy_kwargs = dict(
         features_extractor_class=CombinedExtractor,
         features_extractor_kwargs=dict(),
-        # net_arch=[dict(pi=[256], vf=[256])],
-        activation_fn=nn.ReLU,
+        net_arch=[dict(pi=[256, 128, 64], vf=[256, 128, 64])],
+        activation_fn=nn.Tanh,
         normalize_images=False,
         # shared_lstm=False,
         # enable_critic_lstm=False,
@@ -127,6 +142,9 @@ def train():
         # lstm_hidden_size=64,
     )
     model = A2C("MultiInputPolicy",
+        use_rms_prop=False,
+        normalize_advantage=True,
+        n_steps=25,
                  policy_kwargs=policy_kwargs, env=env, verbose=1, tensorboard_log="./logs/")
 
     # model.load("logs/rl_model_400000_steps.zip")
