@@ -42,7 +42,7 @@ func (p *Player) getReward() float32 {
 	p.game.player1Controller.distanceStack = append(p.game.player1Controller.distanceStack, 100-eucDistance)
 
 	// If the stack is full, pop the oldest value off the stack
-	if len(p.game.player1Controller.distanceStack) > 10 {
+	if len(p.game.player1Controller.distanceStack) > 25 {
 		p.game.player1Controller.distanceStack = p.game.player1Controller.distanceStack[1:]
 	}
 
@@ -51,21 +51,29 @@ func (p *Player) getReward() float32 {
 	for _, value := range p.game.player1Controller.distanceStack {
 		sum += value
 	}
-
 	average := sum / float64(len(p.game.player1Controller.distanceStack))
 
-	bonuses := 1.0
-
-	if p.is_moving {
-		bonuses = 2
+	// Get the distance in the stack 10 places ago
+	var distance10 float64
+	if len(p.game.player1Controller.distanceStack) > 4 {
+		distance10 = p.game.player1Controller.distanceStack[len(p.game.player1Controller.distanceStack)-5]
+	} else {
+		return 1
 	}
 
-	if p.view.isOtherPlayerSpriteVisible {
-		bonuses = 3
+	if p.view.distanceToWall < 1 {
+		return -1
 	}
 
-	// If the log of the average is less than 0, then the players are getting closer
-	return float32(math.Log(average * bonuses))
+	if average < distance10 && p.view.isOtherPlayerSpriteVisible {
+		return float32(2)
+	} else if average < distance10 && !p.view.isOtherPlayerSpriteVisible {
+		return float32(1)
+	} else if average > distance10 {
+		return 0
+	}
+
+	return 0
 }
 
 func (p *Player) getIntensityValuesAroundPlayer() [][]float64 {
