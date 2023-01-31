@@ -57,14 +57,12 @@ func (p *PlayerController) processInput(win *pixelgl.Window, dt float64) {
 	// Get observation and reward
 
 	if action > 0 {
+
+		p.player.view.render()
+
 		reward := p.player.getReward()
 		//p1Obs, _ := p.player.game.GetPlayer1Observation()
 		episodeLength := p.player.game.currentTick - p.player.game.episodeStartTick
-
-		//distToWall := p.player.game.distToNearestWall(p.player.view.position, 0.5)
-		//print("Distance to wall: ", distToWall, "\r\n")
-
-		//touchingWall := p.player.view.distanceToWall < 0.5
 
 		done := p.player.isDone() || episodeLength > maxEpisodeLength // || touchingWall
 
@@ -101,6 +99,8 @@ func (p *PlayerController) processInput(win *pixelgl.Window, dt float64) {
 				p.player.game.lastPlayer1PositionUpdateTick = p.player.game.currentTick
 			}
 		}
+
+		print(reward, " \r\n")
 	}
 }
 

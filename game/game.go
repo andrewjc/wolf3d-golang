@@ -81,8 +81,6 @@ func (g *GameInstance) GameLoop() {
 		//g.autoPlan(g.player1Controller, g.player2Controller, dt)
 
 		// Render player1's view
-		//g.player1Controller.player.view.render()
-
 		if g.renderListener.renderBuffer != nil {
 			g.renderListener.renderBufferMutex.Lock()
 			p := pixel.PictureDataFromImage(g.renderListener.renderBuffer)
