@@ -30,13 +30,13 @@ func calcIntensity(x, y int, sourceX, sourceY float64, m [][]int) float64 {
 	intensity := 1.0 / math.Pow(distance, 2)
 
 	// Adjust intensity based on obstacles in the way
-	for i := x - 1; i <= x+1; i++ {
-		for j := y - 1; j <= y+1; j++ {
-			if i >= 0 && i < len(m) && j >= 0 && j < len(m[0]) && m[i][j] == 2 {
-				intensity *= 0.5
-			}
-		}
-	}
+	//for i := x - 1; i <= x+1; i++ {
+	//	for j := y - 1; j <= y+1; j++ {
+	//		if i >= 0 && i < len(m) && j >= 0 && j < len(m[0]) && m[i][j] == 2 {
+	//			intensity *= 0.5
+	//		}
+	//	}
+	//}
 
 	return intensity
 }
