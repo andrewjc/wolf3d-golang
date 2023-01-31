@@ -17,3 +17,7 @@ venv:
 train:
 	@echo "Training model..."
 	@venv/bin/python3 train.py
+
+tensorboard:
+	@echo "Starting tensorboard..."
+	@venv/bin/tensorboard --logdir=logs --bind_all
